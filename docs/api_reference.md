@@ -369,16 +369,16 @@ Parse security policy document (PDF, Markdown, HTML, or text) and extract requir
 
 #### generate_control_files
 
-Generate control file structure from extracted requirements. Creates individual requirement files in a flat directory structure (ComplianceAsCode format).
+Generate control file structure from extracted requirements. Use `inline` format for a single monolithic file or `directory` format for a parent file with individual requirement files.
 
 **Parameters:**
 - `policy_id` (string, required): Policy identifier
 - `policy_title` (string, required): Policy title
+- `format` (string, required): Output format. `"inline"`: single file with all requirements in a controls list. `"directory"`: parent file with `controls_dir` referencing individual requirement files. Enum: `inline`, `directory`.
 - `requirements_json` (string, required): JSON string of extracted requirements. Format: `{"requirements": [{"id": "...", "title": "...", "description": "...", "section": "..."}]}` or just the array.
 - `source_document` (string, optional): Source document path or URL
 - `version` (string, optional): Version string (e.g., "v3r1", "1.0")
 - `levels` (array of strings, optional): Compliance levels (e.g., ["high", "medium", "low"])
-- `nested_by_section` (boolean, optional): Deprecated — always uses flat structure as required by ComplianceAsCode. Default: false.
 - `product` (string, optional): Product ID; generates into `products/<product>/controls/` instead of `controls/`
 
 **Returns:** ControlGenerationResult object

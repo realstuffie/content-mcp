@@ -2,6 +2,7 @@
 
 import logging
 from pathlib import Path
+from typing import Literal
 
 import yaml
 
@@ -45,27 +46,23 @@ class ControlGenerator:
         policy_id: str,
         policy_title: str,
         requirements: list[ExtractedRequirement],
+        format: Literal["inline", "directory"],
         output_dir: Path | None = None,
-        nested_by_section: bool = False,  # Deprecated, kept for compatibility
         source_document: str | None = None,
         description: str | None = None,
         version: str | None = None,
         levels: list[str] | None = None,
         product: str | None = None,
     ) -> ControlGenerationResult:
-        """Generate control file structure with individual requirement files.
-
-        Creates flat structure as required by ComplianceAsCode:
-        - controls/<policy_id>/req1.yml
-        - controls/<policy_id>/req2.yml
-        - controls/<policy_id>.yml (parent with controls_dir reference)
+        """Generate control file structure from extracted requirements.
 
         Args:
             policy_id: Policy identifier
             policy_title: Policy title
             requirements: List of extracted requirements
+            format: Output format - "inline" for a single monolithic file,
+                    "directory" for a parent file with individual requirement files
             output_dir: Optional output directory (defaults to controls/)
-            nested_by_section: Deprecated, always uses flat structure
             source_document: Source document path or URL
             description: Optional policy description
             version: Optional version string (e.g., 'v3r1')
@@ -76,7 +73,7 @@ class ControlGenerator:
         Returns:
             ControlGenerationResult with file paths and status
         """
-        logger.info(f"Generating control structure for {policy_id} (product={product})")
+        logger.info(f"Generating control structure for {policy_id} (format={format})")
 
         try:
             # Determine output directory
@@ -88,82 +85,29 @@ class ControlGenerator:
             else:
                 output_dir = Path(output_dir)
 
-            policy_dir = output_dir / policy_id
-            parent_file_path = output_dir / f"{policy_id}.yml"
-
-            # Check if already exists
-            if policy_dir.exists() or parent_file_path.exists():
-                return ControlGenerationResult(
-                    policy_id=policy_id,
-                    parent_file_path=parent_file_path,
-                    requirement_files=[],
-                    total_requirements=0,
-                    sections=[],
-                    success=False,
-                    errors=[
-                        f"Control structure already exists: {policy_dir} or {parent_file_path}"
-                    ],
-                    warnings=[],
-                )
-
-            # Create flat directory structure
-            policy_dir.mkdir(parents=True, exist_ok=True)
-
-            # Convert ExtractedRequirement to ControlRequirement
             control_requirements = self._convert_to_control_requirements(requirements)
 
-            # Generate individual requirement files (flat structure)
-            requirement_files = []
-
-            for idx, req in enumerate(control_requirements, 1):
-                # Generate filename from requirement ID or index
-                filename = self._generate_filename(req, idx)
-                file_path = policy_dir / filename
-
-                # Generate requirement file
-                success = self.generate_requirement_file(req, file_path)
-                if success:
-                    # Store relative path from policy_dir (just filename for flat structure)
-                    requirement_files.append(filename)
-
-            # Generate parent control file
-            parent_success = self.generate_parent_control_file(
-                policy_id=policy_id,
-                policy_title=policy_title,
-                requirement_files=requirement_files,
-                output_path=parent_file_path,
-                source_document=source_document,
-                description=description,
-                version=version,
-                levels=levels,
-            )
-
-            if not parent_success:
-                return ControlGenerationResult(
+            if format == "inline":
+                return self._generate_inline_file(
                     policy_id=policy_id,
-                    parent_file_path=parent_file_path,
-                    requirement_files=[policy_dir / f for f in requirement_files],
-                    total_requirements=len(control_requirements),
-                    sections=[],
-                    success=False,
-                    errors=["Failed to generate parent control file"],
-                    warnings=[],
+                    policy_title=policy_title,
+                    control_requirements=control_requirements,
+                    output_dir=output_dir,
+                    source_document=source_document,
+                    version=version,
+                    levels=levels,
                 )
-
-            logger.info(
-                f"Created flat control structure with {len(requirement_files)} requirements"
-            )
-
-            return ControlGenerationResult(
-                policy_id=policy_id,
-                parent_file_path=parent_file_path,
-                requirement_files=[policy_dir / f for f in requirement_files],
-                total_requirements=len(control_requirements),
-                sections=[],  # No sections in flat structure
-                success=True,
-                errors=[],
-                warnings=[],
-            )
+            else:
+                return self._generate_directory_structure(
+                    policy_id=policy_id,
+                    policy_title=policy_title,
+                    control_requirements=control_requirements,
+                    output_dir=output_dir,
+                    source_document=source_document,
+                    description=description,
+                    version=version,
+                    levels=levels,
+                )
 
         except Exception as e:
             logger.error(f"Failed to generate control structure: {e}")
@@ -178,6 +122,198 @@ class ControlGenerator:
                 warnings=[],
             )
 
+    def _generate_directory_structure(
+        self,
+        policy_id: str,
+        policy_title: str,
+        control_requirements: list[ControlRequirement],
+        output_dir: Path,
+        source_document: str | None = None,
+        description: str | None = None,
+        version: str | None = None,
+        levels: list[str] | None = None,
+    ) -> ControlGenerationResult:
+        """Generate directory-based control file structure.
+
+        Creates:
+        - <output_dir>/<policy_id>.yml (parent with controls_dir reference)
+        - <output_dir>/<policy_id>/<req>.yml (individual requirement files)
+        """
+        policy_dir = output_dir / policy_id
+        parent_file_path = output_dir / f"{policy_id}.yml"
+
+        if policy_dir.exists() or parent_file_path.exists():
+            return ControlGenerationResult(
+                policy_id=policy_id,
+                parent_file_path=parent_file_path,
+                requirement_files=[],
+                total_requirements=0,
+                sections=[],
+                success=False,
+                errors=[f"Control structure already exists: {policy_dir} or {parent_file_path}"],
+                warnings=[],
+            )
+
+        policy_dir.mkdir(parents=True, exist_ok=True)
+
+        requirement_files = []
+        for idx, req in enumerate(control_requirements, 1):
+            filename = self._generate_filename(req, idx)
+            file_path = policy_dir / filename
+
+            success = self.generate_requirement_file(req, file_path)
+            if success:
+                requirement_files.append(filename)
+
+        parent_success = self.generate_parent_control_file(
+            policy_id=policy_id,
+            policy_title=policy_title,
+            requirement_files=requirement_files,
+            output_path=parent_file_path,
+            source_document=source_document,
+            description=description,
+            version=version,
+            levels=levels,
+        )
+
+        if not parent_success:
+            return ControlGenerationResult(
+                policy_id=policy_id,
+                parent_file_path=parent_file_path,
+                requirement_files=[policy_dir / f for f in requirement_files],
+                total_requirements=len(control_requirements),
+                sections=[],
+                success=False,
+                errors=["Failed to generate parent control file"],
+                warnings=[],
+            )
+
+        logger.info(
+            f"Created directory control structure with {len(requirement_files)} requirements"
+        )
+
+        return ControlGenerationResult(
+            policy_id=policy_id,
+            parent_file_path=parent_file_path,
+            requirement_files=[policy_dir / f for f in requirement_files],
+            total_requirements=len(control_requirements),
+            sections=[],
+            success=True,
+            errors=[],
+            warnings=[],
+        )
+
+    def _generate_inline_file(
+        self,
+        policy_id: str,
+        policy_title: str,
+        control_requirements: list[ControlRequirement],
+        output_dir: Path,
+        source_document: str | None = None,
+        version: str | None = None,
+        levels: list[str] | None = None,
+    ) -> ControlGenerationResult:
+        """Generate a single monolithic control file with all requirements inline.
+
+        Creates: <output_dir>/<policy_id>.yml with metadata and controls list.
+        """
+        file_path = output_dir / f"{policy_id}.yml"
+
+        if file_path.exists():
+            return ControlGenerationResult(
+                policy_id=policy_id,
+                parent_file_path=file_path,
+                requirement_files=[],
+                total_requirements=0,
+                sections=[],
+                success=False,
+                errors=[f"Control file already exists: {file_path}"],
+                warnings=[],
+            )
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        content: dict = {
+            "policy": policy_title,
+            "title": policy_title,
+            "id": policy_id,
+        }
+
+        if version:
+            content["version"] = version
+
+        if source_document:
+            content["source"] = source_document
+
+        if levels:
+            content["levels"] = [{"id": level} for level in levels]
+        else:
+            content["levels"] = [
+                {"id": "high"},
+                {"id": "medium"},
+                {"id": "low"},
+            ]
+
+        content["controls"] = [self._build_control_item(req) for req in control_requirements]
+
+        with open(file_path, "w") as f:
+            yaml.dump(
+                content,
+                f,
+                default_flow_style=False,
+                sort_keys=False,
+                allow_unicode=True,
+                indent=4,
+                width=120,
+            )
+
+        logger.info(f"Created inline control file with {len(control_requirements)} requirements")
+
+        return ControlGenerationResult(
+            policy_id=policy_id,
+            parent_file_path=file_path,
+            requirement_files=[],
+            total_requirements=len(control_requirements),
+            sections=[],
+            success=True,
+            errors=[],
+            warnings=[],
+        )
+
+    def _build_control_item(self, requirement: ControlRequirement) -> dict:
+        """Build a control item dict from a requirement.
+
+        Args:
+            requirement: Control requirement
+
+        Returns:
+            Dictionary representing a single control item in ComplianceAsCode format
+        """
+        control_item: dict = {
+            "id": requirement.id,
+        }
+
+        if requirement.levels:
+            control_item["levels"] = requirement.levels
+
+        control_item["title"] = folded_str(requirement.description)
+
+        if requirement.rules:
+            control_item["rules"] = requirement.rules
+
+        control_item["status"] = requirement.status
+
+        if requirement.related_rules:
+            control_item["related_rules"] = requirement.related_rules
+
+        if requirement.references:
+            control_item["references"] = requirement.references
+
+        if requirement.notes:
+            control_item["notes"] = folded_str(requirement.notes)
+
+        return control_item
+
     def generate_requirement_file(self, requirement: ControlRequirement, file_path: Path) -> bool:
         """Generate individual requirement control file in ComplianceAsCode format.
 
@@ -189,41 +325,9 @@ class ControlGenerator:
             True if successful, False otherwise
         """
         try:
-            # Build control item following ComplianceAsCode format
-            control_item = {
-                "id": requirement.id,
-            }
-
-            # Add levels if specified
-            if requirement.levels:
-                control_item["levels"] = requirement.levels
-
-            # Use description as title (full requirement text)
-            # Wrap in folded_str for better multi-line formatting
-            control_item["title"] = folded_str(requirement.description)
-
-            # Add rules if present
-            if requirement.rules:
-                control_item["rules"] = requirement.rules
-
-            # Add status
-            control_item["status"] = requirement.status
-
-            # Add optional fields
-            if requirement.related_rules:
-                control_item["related_rules"] = requirement.related_rules
-
-            if requirement.references:
-                control_item["references"] = requirement.references
-
-            if requirement.notes:
-                # Use folded_str for notes too
-                control_item["notes"] = folded_str(requirement.notes)
-
-            # Wrap in controls list (ComplianceAsCode format)
+            control_item = self._build_control_item(requirement)
             content = {"controls": [control_item]}
 
-            # Write YAML file with proper formatting
             with open(file_path, "w") as f:
                 yaml.dump(
                     content,
@@ -232,7 +336,7 @@ class ControlGenerator:
                     sort_keys=False,
                     allow_unicode=True,
                     indent=4,
-                    width=120,  # Wider line width for longer titles
+                    width=120,
                 )
 
             logger.debug(f"Created requirement file: {file_path}")
@@ -351,46 +455,6 @@ class ControlGenerator:
             requirements.append(control_req)
 
         return requirements
-
-    def _group_by_section(
-        self, requirements: list[ControlRequirement]
-    ) -> dict[str, list[ControlRequirement]]:
-        """Group requirements by section.
-
-        Args:
-            requirements: List of requirements
-
-        Returns:
-            Dictionary mapping section ID to requirements
-        """
-        sections: dict[str, list[ControlRequirement]] = {}
-
-        for req in requirements:
-            section_id = req.section or "default"
-            # Clean section ID for filesystem
-            section_id = self._clean_section_id(section_id)
-
-            if section_id not in sections:
-                sections[section_id] = []
-            sections[section_id].append(req)
-
-        return sections
-
-    def _clean_section_id(self, section_id: str) -> str:
-        """Clean section ID for use as directory name.
-
-        Args:
-            section_id: Section identifier
-
-        Returns:
-            Cleaned section ID
-        """
-        # Replace special characters with underscores
-        clean = "".join(c if c.isalnum() or c in "-_" else "_" for c in section_id)
-        # Remove consecutive underscores
-        clean = "_".join(filter(None, clean.split("_")))
-        # Limit length
-        return clean[:50].lower()
 
     def _generate_filename(self, requirement: ControlRequirement, index: int) -> str:
         """Generate filename for requirement.

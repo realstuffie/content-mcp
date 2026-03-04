@@ -330,7 +330,7 @@ TOOLS = [
     },
     {
         "name": "generate_control_files",
-        "description": "Generate control file structure from extracted requirements. Creates individual requirement files in a flat directory structure (ComplianceAsCode format).",
+        "description": "Generate control file structure from extracted requirements. Use 'inline' format for a single monolithic file or 'directory' format for a parent file with individual requirement files.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -341,6 +341,11 @@ TOOLS = [
                 "policy_title": {
                     "type": "string",
                     "description": "Policy title",
+                },
+                "format": {
+                    "type": "string",
+                    "enum": ["inline", "directory"],
+                    "description": "Output format. 'inline': single file with all requirements in a controls list. 'directory': parent file with controls_dir referencing individual requirement files.",
                 },
                 "source_document": {
                     "type": "string",
@@ -359,17 +364,12 @@ TOOLS = [
                     "items": {"type": "string"},
                     "description": "Optional compliance levels (e.g., ['high', 'medium', 'low'])",
                 },
-                "nested_by_section": {
-                    "type": "boolean",
-                    "description": "Deprecated - always uses flat structure as required by ComplianceAsCode",
-                    "default": False,
-                },
                 "product": {
                     "type": "string",
                     "description": "Optional product ID; generates into products/<product>/controls/ instead of controls/",
                 },
             },
-            "required": ["policy_id", "policy_title", "requirements_json"],
+            "required": ["policy_id", "policy_title", "format", "requirements_json"],
         },
     },
     {
@@ -928,8 +928,6 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
             source_document = arguments.get("source_document")
             version = arguments.get("version")
             levels = arguments.get("levels")
-            nested = arguments.get("nested_by_section", False)  # Always flat structure
-
             # Parse requirements JSON
             requirements_data = json.loads(requirements_json)
 
@@ -982,7 +980,7 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
                 policy_id=policy_id,
                 policy_title=policy_title,
                 requirements=requirements,
-                nested_by_section=nested,
+                format=arguments["format"],
                 source_document=source_document,
                 version=version,
                 levels=levels,
