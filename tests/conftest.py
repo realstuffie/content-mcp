@@ -1,5 +1,6 @@
 """Pytest configuration and fixtures."""
 
+import os
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -8,6 +9,66 @@ import pytest
 
 from content_agent.config import initialize_settings
 from content_agent.core.integration import initialize_content_repository
+
+
+def _find_content_repo() -> Path | None:
+    """Find a ComplianceAsCode/content repository for integration tests.
+
+    Checks (in order):
+    1. CONTENT_REPO env var (explicit path)
+    2. Default managed path (~/.content-agent/content)
+
+    Returns:
+        Path to content repo, or None if not found.
+    """
+    env_path = os.environ.get("CONTENT_REPO")
+    if env_path:
+        p = Path(env_path).expanduser()
+        if p.exists() and (p / "products").is_dir() and (p / "ssg").is_dir():
+            return p
+
+    managed = Path.home() / ".content-agent" / "content"
+    if managed.exists() and (managed / "products").is_dir() and (managed / "ssg").is_dir():
+        return managed
+
+    return None
+
+
+CONTENT_REPO_PATH = _find_content_repo()
+HAS_CONTENT_REPO = CONTENT_REPO_PATH is not None
+
+requires_content_repo = pytest.mark.skipif(
+    not HAS_CONTENT_REPO,
+    reason="Requires ComplianceAsCode/content repository "
+    "(set CONTENT_REPO env var or clone to ~/.content-agent/content)",
+)
+
+
+@pytest.fixture(scope="session")
+def real_content_repo():
+    """Initialize the real content repository (session-scoped).
+
+    Only available when a real ComplianceAsCode/content repo is found.
+    """
+    assert CONTENT_REPO_PATH is not None
+    initialize_settings()
+    repo = initialize_content_repository(CONTENT_REPO_PATH)
+
+    # Initialize SSG modules from the real repo
+    from content_agent.core.integration import initialize_ssg_modules
+
+    initialize_ssg_modules()
+
+    yield repo
+
+    # Cleanup global state
+    import content_agent.config.settings as settings_module
+    import content_agent.core.integration.content_manager as cm
+    import content_agent.core.integration.ssg_modules as sm
+
+    settings_module._settings = None
+    cm._content_repo = None
+    sm._ssg_modules = None
 
 
 @pytest.fixture

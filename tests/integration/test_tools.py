@@ -1,7 +1,7 @@
 """Integration tests for MCP tool handlers.
 
-Note: These tests require a valid content repository to be set up.
-For CI/CD, you may need to skip these or use fixtures.
+These tests require a valid ComplianceAsCode/content repository.
+Set CONTENT_REPO env var or clone to ~/.content-agent/content.
 """
 
 import json
@@ -9,14 +9,15 @@ import json
 import pytest
 
 from content_agent.server.handlers.tools import handle_tool_call
+from tests.conftest import requires_content_repo
 
 
-@pytest.mark.skip(reason="Requires actual content repository")
+@requires_content_repo
 class TestToolHandlers:
     """Test MCP tool handlers (integration tests)."""
 
     @pytest.mark.asyncio
-    async def test_list_products_tool(self):
+    async def test_list_products_tool(self, real_content_repo):
         """Test list_products tool."""
         result = await handle_tool_call("list_products", {})
 
@@ -28,7 +29,7 @@ class TestToolHandlers:
         assert isinstance(data, list)
 
     @pytest.mark.asyncio
-    async def test_search_rules_tool(self):
+    async def test_search_rules_tool(self, real_content_repo):
         """Test search_rules tool."""
         result = await handle_tool_call("search_rules", {"query": "ssh", "limit": 5})
 
@@ -41,7 +42,7 @@ class TestToolHandlers:
         assert "[" in response_text  # JSON array
 
     @pytest.mark.asyncio
-    async def test_validate_rule_yaml_tool(self):
+    async def test_validate_rule_yaml_tool(self, real_content_repo):
         """Test validate_rule_yaml tool."""
         yaml_content = """
 documentation_complete: true
@@ -60,7 +61,7 @@ severity: medium
         assert isinstance(data["valid"], bool)
 
     @pytest.mark.asyncio
-    async def test_validate_rule_yaml_with_errors(self):
+    async def test_validate_rule_yaml_with_errors(self, real_content_repo):
         """Test validate_rule_yaml with invalid YAML."""
         yaml_content = """
 title: Test Rule
@@ -73,7 +74,7 @@ severity: invalid_severity
         assert len(data["errors"]) > 0
 
     @pytest.mark.asyncio
-    async def test_tool_error_handling(self):
+    async def test_tool_error_handling(self, real_content_repo):
         """Test tool error handling for missing parameters."""
         # Missing required parameter
         result = await handle_tool_call("get_product_details", {})
@@ -86,7 +87,7 @@ severity: invalid_severity
         assert "error" in response.lower() or "fail" in response.lower()
 
     @pytest.mark.asyncio
-    async def test_unknown_tool(self):
+    async def test_unknown_tool(self, real_content_repo):
         """Test calling unknown tool."""
         result = await handle_tool_call("unknown_tool_name", {})
 
@@ -94,7 +95,7 @@ severity: invalid_severity
         assert "Unknown tool" in result[0]["text"]
 
     @pytest.mark.asyncio
-    async def test_get_control_rule_index_tool(self):
+    async def test_get_control_rule_index_tool(self, real_content_repo):
         """Test get_control_rule_index tool."""
         result = await handle_tool_call("get_control_rule_index", {})
 
@@ -104,7 +105,7 @@ severity: invalid_severity
         assert "Control rule index" in response_text
 
     @pytest.mark.asyncio
-    async def test_get_control_rule_index_with_filter(self):
+    async def test_get_control_rule_index_with_filter(self, real_content_repo):
         """Test get_control_rule_index tool with control_ids filter."""
         result = await handle_tool_call(
             "get_control_rule_index",
@@ -118,7 +119,7 @@ severity: invalid_severity
         assert "0 controls" in response_text
 
     @pytest.mark.asyncio
-    async def test_find_similar_requirements_tool(self):
+    async def test_find_similar_requirements_tool(self, real_content_repo):
         """Test find_similar_requirements tool."""
         result = await handle_tool_call(
             "find_similar_requirements",
@@ -131,7 +132,7 @@ severity: invalid_severity
         assert "similar requirements" in response_text
 
     @pytest.mark.asyncio
-    async def test_get_rule_product_availability_tool_not_found(self):
+    async def test_get_rule_product_availability_tool_not_found(self, real_content_repo):
         """Test get_rule_product_availability tool with nonexistent rule."""
         result = await handle_tool_call(
             "get_rule_product_availability",
@@ -166,20 +167,16 @@ severity: {severity}
             severity_errors = [e for e in data.get("errors", []) if e.get("field") == "severity"]
             assert len(severity_errors) == 0
 
+    @requires_content_repo
     @pytest.mark.asyncio
-    async def test_search_rules_limit_parameter(self):
+    async def test_search_rules_limit_parameter(self, real_content_repo):
         """Test search_rules with limit parameter."""
-        # Note: This test may be skipped if no real content
-        try:
-            result = await handle_tool_call("search_rules", {"query": "ssh", "limit": 3})
+        result = await handle_tool_call("search_rules", {"query": "ssh", "limit": 3})
 
-            response_text = result[0]["text"]
-            # Extract JSON part (after summary line)
-            json_start = response_text.index("[")
-            data = json.loads(response_text[json_start:])
+        response_text = result[0]["text"]
+        # Extract JSON part (after summary line)
+        json_start = response_text.index("[")
+        data = json.loads(response_text[json_start:])
 
-            # Should respect limit
-            assert len(data) <= 3
-        except Exception:
-            # Skip if no content available
-            pytest.skip("No content repository available")
+        # Should respect limit
+        assert len(data) <= 3

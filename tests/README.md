@@ -40,13 +40,19 @@ pytest tests/unit/
 
 ### Run Only Integration Tests
 
-Integration tests require a ComplianceAsCode/content repository:
+Integration tests require a ComplianceAsCode/content repository. They are
+**automatically skipped** when no repo is detected, and **automatically run**
+when one is found. Detection checks two locations in order:
+
+1. `CONTENT_REPO` environment variable (explicit path)
+2. `~/.content-agent/content` (default managed path)
 
 ```bash
-# Set content repository location
-export CAC_MCP_CONTENT__REPOSITORY=/path/to/content
+# Option A: point to an existing clone
+CONTENT_REPO=/path/to/content pytest tests/integration/
 
-# Run integration tests
+# Option B: clone to the default location (auto-detected)
+git clone --depth 1 https://github.com/ComplianceAsCode/content.git ~/.content-agent/content
 pytest tests/integration/
 ```
 
@@ -103,18 +109,20 @@ These should always pass and run quickly.
 - `test_tools.py` - MCP tool handlers
 - `test_resources.py` - MCP resource handlers
 
-These are marked with `@pytest.mark.skip` by default. To run them:
+These use `@requires_content_repo` (a conditional `skipif` marker from
+`conftest.py`) and are automatically skipped when no repo is detected.
+To run them, make a content repo available:
 
-1. Set up a content repository:
-   ```bash
-   git clone https://github.com/ComplianceAsCode/content.git /tmp/content
-   export CAC_MCP_CONTENT__REPOSITORY=/tmp/content
-   ```
+```bash
+git clone --depth 1 https://github.com/ComplianceAsCode/content.git ~/.content-agent/content
+pytest tests/integration/
+```
 
-2. Remove skip markers or run with:
-   ```bash
-   pytest tests/integration/ --run-integration
-   ```
+Or point to an existing clone:
+
+```bash
+CONTENT_REPO=/path/to/content pytest tests/integration/
+```
 
 ## Writing Tests
 
@@ -139,14 +147,16 @@ def test_product_creation():
 
 ```python
 import pytest
+from tests.conftest import requires_content_repo
 
-@pytest.mark.skip(reason="Requires content repository")
+@requires_content_repo
 class TestWithContent:
-    """Tests that need real content."""
+    """Tests that need a real ComplianceAsCode/content repo."""
 
     @pytest.mark.asyncio
-    async def test_something(self):
-        """Test with actual content."""
+    async def test_something(self, real_content_repo):
+        """Test with actual content. The real_content_repo fixture
+        initializes settings and the content repository."""
         # Test code here
         pass
 ```
@@ -173,8 +183,7 @@ For continuous integration:
 - name: Run integration tests
   run: |
     git clone --depth 1 https://github.com/ComplianceAsCode/content.git /tmp/content
-    export CAC_MCP_CONTENT__REPOSITORY=/tmp/content
-    pytest tests/integration/ -v
+    CONTENT_REPO=/tmp/content pytest tests/integration/ -v
 ```
 
 ## Test Fixtures
@@ -185,7 +194,11 @@ Available fixtures (see `conftest.py`):
 - `sample_rule_yaml` - Sample rule.yml content
 - `sample_product_yaml` - Sample product.yml content
 - `sample_profile_content` - Sample profile content
-- `mock_content_repo` - Mock content repository structure
+- `mock_content_repo` - Mock content repository structure (for unit tests)
+- `initialized_content_repo` - Mock repo with global state initialized (for unit tests)
+- `real_content_repo` - Real ComplianceAsCode/content repo, session-scoped (for integration tests; requires `CONTENT_REPO` env var or `~/.content-agent/content`)
+
+Additionally, `requires_content_repo` is a `skipif` marker importable from `tests.conftest` that skips tests when no real content repo is available.
 
 ## Coverage Goals
 
@@ -221,9 +234,9 @@ pytest -x
 1. **ModuleNotFoundError**
    - Solution: `pip install -e ".[dev]"`
 
-2. **Integration tests fail**
-   - Check: `echo $CAC_MCP_CONTENT__REPOSITORY`
-   - Solution: Point to valid content repository
+2. **Integration tests skipped**
+   - Check: `echo $CONTENT_REPO` or verify `~/.content-agent/content` exists
+   - Solution: Set `CONTENT_REPO=/path/to/content` or clone to `~/.content-agent/content`
 
 3. **Import errors**
    - Solution: Run tests from project root, not tests/

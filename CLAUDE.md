@@ -22,6 +22,12 @@ pytest tests/unit/test_validators.py      # single file
 pytest tests/unit/test_validators.py::TestRuleValidator::test_valid_rule -x  # single test, stop on first failure
 ```
 
+Integration tests auto-detect a ComplianceAsCode/content repo and skip if none is found. To enable them:
+```bash
+CONTENT_REPO=/path/to/content pytest tests/integration/   # explicit path
+# or clone to ~/.content-agent/content (auto-detected)
+```
+
 ### Lint and format
 ```bash
 black --check src/ tests/                 # check formatting

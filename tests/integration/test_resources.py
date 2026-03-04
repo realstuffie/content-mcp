@@ -5,6 +5,7 @@ import json
 import pytest
 
 from content_agent.server.handlers.resources import handle_resource_read, list_resources
+from tests.conftest import requires_content_repo
 
 
 class TestResourceListing:
@@ -31,12 +32,12 @@ class TestResourceListing:
         assert "cac://templates" in uris
 
 
-@pytest.mark.skip(reason="Requires actual content repository")
+@requires_content_repo
 class TestResourceRead:
     """Test resource reading (requires real content)."""
 
     @pytest.mark.asyncio
-    async def test_read_products_resource(self):
+    async def test_read_products_resource(self, real_content_repo):
         """Test reading products resource."""
         content = await handle_resource_read("cac://products")
 
@@ -45,7 +46,7 @@ class TestResourceRead:
         assert isinstance(data, list)
 
     @pytest.mark.asyncio
-    async def test_read_specific_product(self):
+    async def test_read_specific_product(self, real_content_repo):
         """Test reading specific product resource."""
         try:
             content = await handle_resource_read("cac://products/rhel9")
@@ -58,7 +59,7 @@ class TestResourceRead:
             pytest.skip("Product rhel9 not available")
 
     @pytest.mark.asyncio
-    async def test_read_rules_resource(self):
+    async def test_read_rules_resource(self, real_content_repo):
         """Test reading rules resource."""
         content = await handle_resource_read("cac://rules")
 
@@ -67,7 +68,7 @@ class TestResourceRead:
         assert isinstance(data, list)
 
     @pytest.mark.asyncio
-    async def test_read_templates_resource(self):
+    async def test_read_templates_resource(self, real_content_repo):
         """Test reading templates resource."""
         content = await handle_resource_read("cac://templates")
 
@@ -76,31 +77,31 @@ class TestResourceRead:
         assert isinstance(data, list)
 
     @pytest.mark.asyncio
-    async def test_invalid_uri_scheme(self):
+    async def test_invalid_uri_scheme(self, real_content_repo):
         """Test reading resource with invalid URI scheme."""
         with pytest.raises(ValueError, match="Invalid URI scheme"):
             await handle_resource_read("http://products")
 
     @pytest.mark.asyncio
-    async def test_invalid_resource_type(self):
+    async def test_invalid_resource_type(self, real_content_repo):
         """Test reading unknown resource type."""
         with pytest.raises(ValueError, match="Unknown resource type"):
             await handle_resource_read("cac://unknown")
 
     @pytest.mark.asyncio
-    async def test_invalid_resource_path(self):
+    async def test_invalid_resource_path(self, real_content_repo):
         """Test reading resource with invalid path."""
         with pytest.raises(ValueError):
             await handle_resource_read("cac://products/invalid/extra/path")
 
     @pytest.mark.asyncio
-    async def test_nonexistent_product(self):
+    async def test_nonexistent_product(self, real_content_repo):
         """Test reading non-existent product."""
         with pytest.raises(ValueError, match="not found"):
             await handle_resource_read("cac://products/nonexistent_product_12345")
 
     @pytest.mark.asyncio
-    async def test_nonexistent_rule(self):
+    async def test_nonexistent_rule(self, real_content_repo):
         """Test reading non-existent rule."""
         with pytest.raises(ValueError, match="not found"):
             await handle_resource_read("cac://rules/nonexistent_rule_12345")
