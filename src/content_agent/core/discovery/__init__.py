@@ -10,6 +10,7 @@ from content_agent.core.discovery.controls import (
     get_control_stats,
     get_requirement_file_path,
     list_controls,
+    list_unmapped_requirements,
 )
 from content_agent.core.discovery.products import get_product_details, list_products
 from content_agent.core.discovery.profiles import get_profile_details, list_profiles
@@ -33,6 +34,7 @@ __all__ = [
     "get_control_stats",
     "get_requirement_file_path",
     "list_controls",
+    "list_unmapped_requirements",
     # Build artifacts
     "list_built_products",
     "get_rendered_rule",

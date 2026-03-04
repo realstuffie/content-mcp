@@ -529,6 +529,31 @@ Resolve the filesystem path for a specific requirement in a control file. Handle
 }
 ```
 
+#### list_unmapped_requirements
+
+List requirements in a control file that need rule mappings. Returns requirements filtered by status, defaulting to "pending". Lighter than `get_control_details` when you only need the work queue.
+
+**Parameters:**
+- `control_id` (string, required): Control framework identifier (e.g., "anssi", "srg_gpos")
+- `status_filter` (array of strings, optional): Status values to include (default: `["pending"]`). Common values: pending, manual, partial, does not meet
+
+**Returns:** Array of IndexedRequirement objects (includes requirements matching status filter OR with empty rules lists)
+
+**Example:**
+```json
+[
+  {
+    "control_id": "anssi",
+    "requirement_id": "R1",
+    "title": "Minimize installed services",
+    "description": "Only install strictly necessary services...",
+    "rules": [],
+    "status": "pending",
+    "levels": ["minimal"]
+  }
+]
+```
+
 ## Data Models
 
 ### ProductSummary

@@ -567,6 +567,25 @@ TOOLS = [
             "required": ["control_id", "requirement_id"],
         },
     },
+    {
+        "name": "list_unmapped_requirements",
+        "description": "List requirements in a control file that need rule mappings. Returns requirements filtered by status, defaulting to 'pending' status. Lighter than get_control_details when you only need the work queue.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "control_id": {
+                    "type": "string",
+                    "description": "Control framework identifier (e.g., 'anssi', 'srg_gpos')",
+                },
+                "status_filter": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Status values to include (default: ['pending']). Common values: pending, manual, partial, does not meet",
+                },
+            },
+            "required": ["control_id"],
+        },
+    },
 ]
 
 
@@ -1119,6 +1138,21 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
                     "text": summary + json.dumps(result.model_dump(mode="json"), indent=2),
                 }
             ]
+
+        elif name == "list_unmapped_requirements":
+            from content_agent.core.discovery.controls import list_unmapped_requirements
+
+            control_id = arguments["control_id"]
+            status_filter = arguments.get("status_filter")
+
+            requirements = list_unmapped_requirements(control_id, status_filter)
+
+            if requirements is None:
+                return [{"type": "text", "text": f"Control not found: {control_id}"}]
+
+            result = [r.model_dump(mode="json") for r in requirements]
+            summary = f"Found {len(requirements)} unmapped requirements in '{control_id}'\n\n"
+            return [{"type": "text", "text": summary + json.dumps(result, indent=2)}]
 
         else:
             raise ValueError(f"Unknown tool: {name}")

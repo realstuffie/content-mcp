@@ -502,6 +502,50 @@ class ControlDiscovery:
         logger.debug(f"Requirement {requirement_id} not found in {control_id}")
         return None
 
+    def list_unmapped_requirements(
+        self,
+        control_id: str,
+        status_filter: list[str] | None = None,
+    ) -> list[IndexedRequirement] | None:
+        """List requirements that need rule mappings.
+
+        Args:
+            control_id: Control framework identifier
+            status_filter: Status values to include (default: ["pending"])
+
+        Returns:
+            List of unmapped IndexedRequirement objects, or None if control not found
+        """
+        logger.debug(f"Listing unmapped requirements for control: {control_id}")
+
+        control = self.get_control_details(control_id)
+        if control is None:
+            return None
+
+        if status_filter is None:
+            status_filter = ["pending"]
+
+        flat = self._flatten_controls(control.controls)
+        results: list[IndexedRequirement] = []
+
+        for req in flat:
+            if req.status in status_filter or not req.rules:
+                description = req.description[:300] if req.description else ""
+                results.append(
+                    IndexedRequirement(
+                        control_id=control_id,
+                        requirement_id=req.id,
+                        title=req.title,
+                        description=description,
+                        rules=req.rules,
+                        status=req.status,
+                        levels=req.levels,
+                    )
+                )
+
+        logger.info(f"Found {len(results)} unmapped requirements in '{control_id}'")
+        return results
+
     def _parse_requirement_file(self, file_path: Path) -> ControlRequirement | None:
         """Parse individual requirement file.
 
@@ -624,3 +668,20 @@ def find_similar_requirements(
     return discovery.find_similar_requirements(
         requirement_text, min_similarity, max_results, exclude_control_id
     )
+
+
+def list_unmapped_requirements(
+    control_id: str,
+    status_filter: list[str] | None = None,
+) -> list[IndexedRequirement] | None:
+    """List requirements that need rule mappings.
+
+    Args:
+        control_id: Control framework identifier
+        status_filter: Status values to include (default: ["pending"])
+
+    Returns:
+        List of unmapped IndexedRequirement objects, or None if control not found
+    """
+    discovery = ControlDiscovery()
+    return discovery.list_unmapped_requirements(control_id, status_filter)
