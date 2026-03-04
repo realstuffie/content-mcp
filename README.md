@@ -275,7 +275,6 @@ For full parameter details and response schemas, see the [API Reference](docs/ap
 
 - `parse_policy_document` - Parse security policy documents (PDF, Markdown, HTML, text)
 - `generate_control_files` - Generate control file structure from requirements
-- `suggest_rule_mappings` - Get AI-suggested rule mappings (requires API key)
 - `validate_control_file` - Validate control file syntax and structure
 - `review_control_generation` - Review generated controls with validation and suggestions
 - `list_controls` - List available control frameworks (optional `product` to scope)
@@ -353,13 +352,6 @@ Claude: "Created control structure:
   - Parent file: controls/nist_800_53.yml
   - 324 requirement files in 18 sections
   - Files organized: controls/nist_800_53/access_control/ac_001.yml, ..."
-
-User: "Suggest rule mappings for the password requirements"
-Claude: [calls suggest_rule_mappings(requirement_text="Organizations must enforce password complexity...")]
-Claude: "Found 5 relevant rules:
-  1. accounts_password_minlen_login_defs (85% confidence)
-  2. accounts_password_pam_minlen (82% confidence)
-  ..."
 
 User: "Review the generated control files"
 Claude: [calls review_control_generation(control_file_path="controls/nist_800_53.yml")]

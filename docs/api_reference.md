@@ -396,33 +396,6 @@ Generate control file structure from extracted requirements. Creates individual 
 }
 ```
 
-#### suggest_rule_mappings
-
-Get AI-suggested rule mappings for a control requirement. Requires Claude API key configured (`CONTENT_AGENT_AI__ENABLED=true` and `CONTENT_AGENT_AI__CLAUDE_API_KEY`).
-
-**Parameters:**
-- `requirement_text` (string, required): Control requirement text
-- `requirement_id` (string, optional): Requirement ID
-- `max_suggestions` (integer, optional): Maximum number of suggestions (default: 10)
-- `min_confidence` (number, optional): Minimum confidence score 0.0–1.0 (default: 0.3)
-- `cross_reference` (boolean, optional): Include cross-framework evidence from similar requirements in other control files (default: false)
-- `target_product` (string, optional): Prioritize rules with identifiers for this product (e.g., "rhel9")
-
-**Returns:** Array of RuleSuggestion objects
-
-**Example:**
-```json
-[
-  {
-    "rule_id": "sshd_set_idle_timeout",
-    "confidence": 0.85,
-    "reasoning": "Rule directly implements session timeout requirement",
-    "match_type": "semantic",
-    "metadata": {}
-  }
-]
-```
-
 #### validate_control_file
 
 Validate control file YAML syntax, structure, and rule references.

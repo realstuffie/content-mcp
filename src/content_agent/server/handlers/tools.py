@@ -367,43 +367,6 @@ TOOLS = [
         },
     },
     {
-        "name": "suggest_rule_mappings",
-        "description": "Get AI-suggested rule mappings for a control requirement (requires Claude API key configured)",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "requirement_text": {
-                    "type": "string",
-                    "description": "Control requirement text",
-                },
-                "requirement_id": {
-                    "type": "string",
-                    "description": "Optional requirement ID",
-                },
-                "max_suggestions": {
-                    "type": "integer",
-                    "description": "Maximum number of suggestions (default: 10)",
-                    "default": 10,
-                },
-                "min_confidence": {
-                    "type": "number",
-                    "description": "Minimum confidence score 0.0-1.0 (default: 0.3)",
-                    "default": 0.3,
-                },
-                "cross_reference": {
-                    "type": "boolean",
-                    "description": "Include cross-framework evidence from similar requirements in other control files (default: false)",
-                    "default": False,
-                },
-                "target_product": {
-                    "type": "string",
-                    "description": "Prioritize rules with identifiers for this product (e.g., 'rhel9')",
-                },
-            },
-            "required": ["requirement_text"],
-        },
-    },
-    {
         "name": "validate_control_file",
         "description": "Validate control file YAML syntax, structure, and rule references",
         "inputSchema": {
@@ -963,50 +926,6 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
                     "text": summary + json.dumps(result.model_dump(mode="json"), indent=2),
                 }
             ]
-
-        elif name == "suggest_rule_mappings":
-            from content_agent.config.settings import get_settings
-            from content_agent.core.ai.claude_client import ClaudeClient
-            from content_agent.core.ai.rule_mapper import RuleMapper
-
-            requirement_text = arguments["requirement_text"]
-            max_suggestions = arguments.get("max_suggestions", 10)
-            min_confidence = arguments.get("min_confidence", 0.3)
-            cross_reference = arguments.get("cross_reference", False)
-            target_product = arguments.get("target_product")
-
-            # Check AI settings
-            settings = get_settings()
-            if not settings.ai.enabled or not settings.ai.claude_api_key:
-                return [
-                    {
-                        "type": "text",
-                        "text": "AI features not enabled. Set CONTENT_AGENT_AI__ENABLED=true and CONTENT_AGENT_AI__CLAUDE_API_KEY",
-                    }
-                ]
-
-            # Create AI client and mapper
-            client = ClaudeClient(
-                api_key=settings.ai.claude_api_key,
-                model=settings.ai.model,
-                max_tokens=settings.ai.max_tokens,
-                temperature=settings.ai.temperature,
-            )
-            mapper = RuleMapper(client)
-
-            # Get suggestions
-            suggestions = mapper.suggest_rules_for_text(
-                requirement_text=requirement_text,
-                max_suggestions=max_suggestions,
-                min_confidence=min_confidence,
-                cross_reference=cross_reference,
-                target_product=target_product,
-            )
-
-            result = [s.model_dump(mode="json") for s in suggestions]
-            summary = f"Found {len(suggestions)} rule suggestions\n\n"
-
-            return [{"type": "text", "text": summary + json.dumps(result, indent=2)}]
 
         elif name == "validate_control_file":
             from pathlib import Path
