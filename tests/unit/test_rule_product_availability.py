@@ -121,7 +121,9 @@ class TestGetRuleProductAvailability:
             "content_agent.core.discovery.profiles.ProfileDiscovery"
         ) as MockProfileDiscovery:
             mock_pd = MockProfileDiscovery.return_value
-            mock_pd.list_profiles.return_value = [mock_profile_summary]
+            from content_agent.models.common import DiscoveryResult
+
+            mock_pd.list_profiles.return_value = DiscoveryResult(items=[mock_profile_summary])
             mock_pd.get_profile_details.return_value = mock_profile_details
 
             discovery._build_profile_rule_index()

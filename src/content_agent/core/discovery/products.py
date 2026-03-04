@@ -6,7 +6,7 @@ from pathlib import Path
 import yaml
 
 from content_agent.core.integration import get_content_repository, get_ssg_modules
-from content_agent.models import ProductDetails, ProductStats, ProductSummary
+from content_agent.models import DiscoveryResult, ProductDetails, ProductStats, ProductSummary
 
 logger = logging.getLogger(__name__)
 
@@ -20,19 +20,19 @@ class ProductDiscovery:
         self.ssg = get_ssg_modules()
         self._product_cache: dict | None = None
 
-    def list_products(self) -> list[ProductSummary]:
+    def list_products(self) -> DiscoveryResult[ProductSummary]:
         """List all available products.
 
         Returns:
-            List of ProductSummary objects
+            DiscoveryResult with ProductSummary items and any parse errors
         """
         logger.debug("Listing all products")
-        products = []
+        result: DiscoveryResult[ProductSummary] = DiscoveryResult()
 
         products_dir = self.content_repo.path / "products"
         if not products_dir.exists():
             logger.error(f"Products directory not found: {products_dir}")
-            return []
+            return result
 
         for product_dir in products_dir.iterdir():
             if not product_dir.is_dir():
@@ -44,14 +44,15 @@ class ProductDiscovery:
 
             try:
                 summary = self._load_product_summary(product_dir.name, product_yml)
-                if summary:
-                    products.append(summary)
+                result.items.append(summary)
             except Exception as e:
-                logger.warning(f"Failed to load product {product_dir.name}: {e}")
+                error_msg = f"Failed to load product {product_dir.name}: {e}"
+                logger.warning(error_msg)
+                result.errors.append(error_msg)
 
-        products.sort(key=lambda p: p.product_id)
-        logger.info(f"Found {len(products)} products")
-        return products
+        result.items.sort(key=lambda p: p.product_id)
+        logger.info(f"Found {len(result.items)} products")
+        return result
 
     def get_product_details(self, product_id: str) -> ProductDetails | None:
         """Get detailed information about a product.
@@ -76,42 +77,37 @@ class ProductDiscovery:
             logger.warning(f"product.yml not found for {product_id}")
             return None
 
-        try:
-            # Note: safe_load is appropriate here - product.yml files do not contain
-            # Jinja2 macros per ComplianceAsCode ADR-0002 (Jinja2 Boundaries)
-            with open(product_yml) as f:
-                data = yaml.safe_load(f)
+        # Note: safe_load is appropriate here - product.yml files do not contain
+        # Jinja2 macros per ComplianceAsCode ADR-0002 (Jinja2 Boundaries)
+        with open(product_yml) as f:
+            data = yaml.safe_load(f)
 
-            # Get profiles
-            profiles = self._get_product_profiles(product_id)
+        # Get profiles
+        profiles = self._get_product_profiles(product_id)
 
-            # Get stats
-            stats = self._calculate_product_stats(product_id)
+        # Get stats
+        stats = self._calculate_product_stats(product_id)
 
-            # Determine benchmark root
-            benchmark_root = self._get_benchmark_root(data)
+        # Determine benchmark root
+        benchmark_root = self._get_benchmark_root(data)
 
-            details = ProductDetails(
-                product_id=product_id,
-                name=data.get("full_name", product_id),
-                product_type=data.get("product_type", "unknown"),
-                version=data.get("product_version"),
-                description=data.get("description"),
-                profiles=profiles,
-                benchmark_root=benchmark_root,
-                product_dir=str(product_dir.relative_to(self.content_repo.path)),
-                cpe=data.get("cpe"),
-                stats=stats,
-            )
+        details = ProductDetails(
+            product_id=product_id,
+            name=data.get("full_name", product_id),
+            product_type=data.get("product_type", "unknown"),
+            version=data.get("product_version"),
+            description=data.get("description"),
+            profiles=profiles,
+            benchmark_root=benchmark_root,
+            product_dir=str(product_dir.relative_to(self.content_repo.path)),
+            cpe=data.get("cpe"),
+            stats=stats,
+        )
 
-            logger.debug(f"Loaded details for product {product_id}")
-            return details
+        logger.debug(f"Loaded details for product {product_id}")
+        return details
 
-        except Exception as e:
-            logger.error(f"Failed to load product {product_id}: {e}")
-            return None
-
-    def _load_product_summary(self, product_id: str, product_yml: Path) -> ProductSummary | None:
+    def _load_product_summary(self, product_id: str, product_yml: Path) -> ProductSummary:
         """Load product summary from product.yml.
 
         Args:
@@ -119,24 +115,23 @@ class ProductDiscovery:
             product_yml: Path to product.yml
 
         Returns:
-            ProductSummary or None
-        """
-        try:
-            # Note: safe_load is appropriate here - product.yml files do not contain
-            # Jinja2 macros per ComplianceAsCode ADR-0002 (Jinja2 Boundaries)
-            with open(product_yml) as f:
-                data = yaml.safe_load(f)
+            ProductSummary
 
-            return ProductSummary(
-                product_id=product_id,
-                name=data.get("full_name", product_id),
-                product_type=data.get("product_type", "unknown"),
-                version=data.get("product_version"),
-                description=data.get("description"),
-            )
-        except Exception as e:
-            logger.warning(f"Failed to load product summary for {product_id}: {e}")
-            return None
+        Raises:
+            Exception: If YAML parsing or model construction fails
+        """
+        # Note: safe_load is appropriate here - product.yml files do not contain
+        # Jinja2 macros per ComplianceAsCode ADR-0002 (Jinja2 Boundaries)
+        with open(product_yml) as f:
+            data = yaml.safe_load(f)
+
+        return ProductSummary(
+            product_id=product_id,
+            name=data.get("full_name", product_id),
+            product_type=data.get("product_type", "unknown"),
+            version=data.get("product_version"),
+            description=data.get("description"),
+        )
 
     def _get_product_profiles(self, product_id: str) -> list[str]:
         """Get list of profile IDs for a product.
@@ -187,11 +182,11 @@ class ProductDiscovery:
         return benchmark_root
 
 
-def list_products() -> list[ProductSummary]:
+def list_products() -> DiscoveryResult[ProductSummary]:
     """List all available products.
 
     Returns:
-        List of ProductSummary objects
+        DiscoveryResult with ProductSummary items and any parse errors
     """
     discovery = ProductDiscovery()
     return discovery.list_products()

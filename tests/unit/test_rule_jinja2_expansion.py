@@ -164,10 +164,12 @@ class TestGetRuleDetailsWithJinja2:
         )
         assert result is not None
 
-
     @patch("content_agent.core.discovery.rules.get_content_repository")
-    def test_returns_none_when_both_expansion_and_yaml_fail(self, mock_repo, tmp_path):
-        """When both ssg expansion and raw yaml.load fail, get_rule_details returns None."""
+    def test_raises_when_both_expansion_and_yaml_fail(self, mock_repo, tmp_path):
+        """When both ssg expansion and raw yaml.load fail, get_rule_details raises."""
+        import pytest
+        import yaml
+
         from content_agent.core.discovery.rules import RuleDiscovery
 
         rule_dir = tmp_path / "linux_os" / "guide" / "broken_rule"
@@ -186,13 +188,12 @@ class TestGetRuleDetailsWithJinja2:
             "content_agent.core.discovery.rules.get_ssg_modules",
             return_value=mock_ssg_modules,
         ):
-            result = discovery.get_rule_details("broken_rule")
-
-        assert result is None
+            with pytest.raises((yaml.scanner.ScannerError, ValueError)):
+                discovery.get_rule_details("broken_rule")
 
     @patch("content_agent.core.discovery.rules.get_content_repository")
-    def test_search_returns_none_when_both_paths_fail(self, mock_repo, tmp_path):
-        """When both paths fail, _load_search_result returns None and rule is excluded."""
+    def test_search_accumulates_error_when_both_paths_fail(self, mock_repo, tmp_path):
+        """When both paths fail, rule is excluded from items and error is accumulated."""
         from content_agent.core.discovery.rules import RuleDiscovery
 
         rule_dir = tmp_path / "linux_os" / "guide" / "broken_rule"
@@ -211,9 +212,11 @@ class TestGetRuleDetailsWithJinja2:
             "content_agent.core.discovery.rules.get_ssg_modules",
             return_value=mock_ssg_modules,
         ):
-            results = discovery.search_rules(query="broken_rule")
+            result = discovery.search_rules(query="broken_rule")
 
-        assert results == []
+        assert result.items == []
+        assert len(result.errors) == 1
+        assert "broken_rule" in result.errors[0]
 
 
 class TestSearchRulesWithJinja2:
@@ -247,5 +250,5 @@ class TestSearchRulesWithJinja2:
         ):
             results = discovery.search_rules(query="pam_unix_enabled")
 
-        rule_ids = [r.rule_id for r in results]
+        rule_ids = [r.rule_id for r in results.items]
         assert "accounts_password_pam_unix_enabled" in rule_ids

@@ -188,7 +188,7 @@ class ControlValidator:
         if available_rules is None:
             try:
                 rule_results = self.rule_discovery.search_rules(limit=10000)
-                available_rules = [r.rule_id for r in rule_results]
+                available_rules = [r.rule_id for r in rule_results.items]
             except Exception as e:
                 warnings.append(f"Could not load available rules: {e}")
                 available_rules = []

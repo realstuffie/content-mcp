@@ -161,7 +161,8 @@ Be conservative - only suggest rules with confidence >= 0.3. Limit to top 10 mos
             Formatted rules context
         """
         # Get all rules (or search for relevant ones)
-        rules = self.rule_discovery.search_rules(limit=limit)
+        rules_result = self.rule_discovery.search_rules(limit=limit)
+        rules = rules_result.items
 
         if not rules:
             return "No rules available in the content repository."

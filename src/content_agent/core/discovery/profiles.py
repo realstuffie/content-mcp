@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 
 from content_agent.core.integration import get_content_repository
-from content_agent.models import ProfileDetails, ProfileSummary
+from content_agent.models import DiscoveryResult, ProfileDetails, ProfileSummary
 
 logger = logging.getLogger(__name__)
 
@@ -16,21 +16,21 @@ class ProfileDiscovery:
         """Initialize profile discovery."""
         self.content_repo = get_content_repository()
 
-    def list_profiles(self, product: str | None = None) -> list[ProfileSummary]:
+    def list_profiles(self, product: str | None = None) -> DiscoveryResult[ProfileSummary]:
         """List profiles for a product or all products.
 
         Args:
             product: Optional product filter
 
         Returns:
-            List of ProfileSummary objects
+            DiscoveryResult with ProfileSummary items and any parse errors
         """
         logger.debug(f"Listing profiles for product: {product or 'all'}")
-        profiles = []
+        result: DiscoveryResult[ProfileSummary] = DiscoveryResult()
 
         products_dir = self.content_repo.path / "products"
         if not products_dir.exists():
-            return []
+            return result
 
         # Determine which products to search
         if product:
@@ -53,14 +53,15 @@ class ProfileDiscovery:
                     summary = self._load_profile_summary(
                         profile_file.stem, product_id, profile_file
                     )
-                    if summary:
-                        profiles.append(summary)
+                    result.items.append(summary)
                 except Exception as e:
-                    logger.warning(f"Failed to load profile {profile_file.stem}: {e}")
+                    error_msg = f"Failed to load profile {profile_file.stem}: {e}"
+                    logger.warning(error_msg)
+                    result.errors.append(error_msg)
 
-        profiles.sort(key=lambda p: (p.product, p.profile_id))
-        logger.info(f"Found {len(profiles)} profiles")
-        return profiles
+        result.items.sort(key=lambda p: (p.product, p.profile_id))
+        logger.info(f"Found {len(result.items)} profiles")
+        return result
 
     def get_profile_details(self, profile_id: str, product: str) -> ProfileDetails | None:
         """Get detailed information about a profile.
@@ -82,47 +83,42 @@ class ProfileDiscovery:
             logger.warning(f"Profile not found: {profile_id} in {product}")
             return None
 
-        try:
-            with open(profile_path) as f:
-                content = f.read()
+        with open(profile_path) as f:
+            content = f.read()
 
-            # Parse profile format (YAML-like but custom)
-            data = self._parse_profile(content)
+        # Parse profile format (YAML-like but custom)
+        data = self._parse_profile(content)
 
-            # Get selections (rule IDs)
-            selections = data.get("selections", [])
+        # Get selections (rule IDs)
+        selections = data.get("selections", [])
 
-            # Get variables
-            variables = data.get("variables", {})
+        # Get variables
+        variables = data.get("variables", {})
 
-            # Determine control file
-            control_file = None
-            if "controls" in data:
-                control_file = data["controls"]
+        # Determine control file
+        control_file = None
+        if "controls" in data:
+            control_file = data["controls"]
 
-            details = ProfileDetails(
-                profile_id=profile_id,
-                title=data.get("title", profile_id),
-                description=data.get("description", ""),
-                product=product,
-                extends=data.get("extends"),
-                selections=selections,
-                variables=variables,
-                file_path=str(profile_path.relative_to(self.content_repo.path)),
-                rule_count=len(selections),
-                control_file=control_file,
-            )
+        details = ProfileDetails(
+            profile_id=profile_id,
+            title=data.get("title", profile_id),
+            description=data.get("description", ""),
+            product=product,
+            extends=data.get("extends"),
+            selections=selections,
+            variables=variables,
+            file_path=str(profile_path.relative_to(self.content_repo.path)),
+            rule_count=len(selections),
+            control_file=control_file,
+        )
 
-            logger.debug(f"Loaded details for profile {profile_id}")
-            return details
-
-        except Exception as e:
-            logger.error(f"Failed to load profile {profile_id}: {e}")
-            return None
+        logger.debug(f"Loaded details for profile {profile_id}")
+        return details
 
     def _load_profile_summary(
         self, profile_id: str, product: str, profile_path: Path
-    ) -> ProfileSummary | None:
+    ) -> ProfileSummary:
         """Load profile summary.
 
         Args:
@@ -131,25 +127,24 @@ class ProfileDiscovery:
             profile_path: Path to profile file
 
         Returns:
-            ProfileSummary or None
+            ProfileSummary
+
+        Raises:
+            Exception: If parsing or model construction fails
         """
-        try:
-            with open(profile_path) as f:
-                content = f.read()
+        with open(profile_path) as f:
+            content = f.read()
 
-            data = self._parse_profile(content)
-            selections = data.get("selections", [])
+        data = self._parse_profile(content)
+        selections = data.get("selections", [])
 
-            return ProfileSummary(
-                profile_id=profile_id,
-                title=data.get("title", profile_id),
-                description=data.get("description", "")[:200],  # Truncate
-                product=product,
-                rule_count=len(selections),
-            )
-        except Exception as e:
-            logger.warning(f"Failed to load profile summary for {profile_id}: {e}")
-            return None
+        return ProfileSummary(
+            profile_id=profile_id,
+            title=data.get("title", profile_id),
+            description=(data.get("description") or "")[:200],  # Truncate
+            product=product,
+            rule_count=len(selections),
+        )
 
     def _parse_profile(self, content: str) -> dict:
         """Parse profile file content.
@@ -222,14 +217,14 @@ class ProfileDiscovery:
         return data
 
 
-def list_profiles(product: str | None = None) -> list[ProfileSummary]:
+def list_profiles(product: str | None = None) -> DiscoveryResult[ProfileSummary]:
     """List profiles for a product or all products.
 
     Args:
         product: Optional product filter
 
     Returns:
-        List of ProfileSummary objects
+        DiscoveryResult with ProfileSummary items and any parse errors
     """
     discovery = ProfileDiscovery()
     return discovery.list_profiles(product)

@@ -710,9 +710,13 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
     try:
         # Discovery tools
         if name == "list_products":
-            products = discovery.list_products()
-            result = [p.model_dump(mode="json") for p in products]
-            return [{"type": "text", "text": json.dumps(result, indent=2)}]
+            discovery_result = discovery.list_products()
+            result = [p.model_dump(mode="json") for p in discovery_result.items]
+            text = json.dumps(result, indent=2)
+            if discovery_result.errors:
+                warnings = "\n".join(f"- {e}" for e in discovery_result.errors)
+                text = f"WARNING: {len(discovery_result.errors)} product(s) failed to parse:\n{warnings}\n\n{text}"
+            return [{"type": "text", "text": text}]
 
         elif name == "get_product_details":
             product_id = arguments["product_id"]
@@ -727,11 +731,14 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
             severity = arguments.get("severity")
             limit = arguments.get("limit", 50)
 
-            rules = discovery.search_rules(
+            discovery_result = discovery.search_rules(
                 query=query, product=product, severity=severity, limit=limit
             )
-            result = [r.model_dump(mode="json") for r in rules]
-            summary = f"Found {len(rules)} rules matching search criteria.\n\n"
+            result = [r.model_dump(mode="json") for r in discovery_result.items]
+            summary = f"Found {len(discovery_result.items)} rules matching search criteria.\n\n"
+            if discovery_result.errors:
+                warnings = "\n".join(f"- {e}" for e in discovery_result.errors)
+                summary += f"WARNING: {len(discovery_result.errors)} rule(s) failed to parse:\n{warnings}\n\n"
             return [{"type": "text", "text": summary + json.dumps(result, indent=2)}]
 
         elif name == "get_rule_details":
@@ -778,9 +785,13 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
 
         elif name == "list_profiles":
             product = arguments.get("product")
-            profiles = discovery.list_profiles(product=product)
-            result = [p.model_dump(mode="json") for p in profiles]
-            return [{"type": "text", "text": json.dumps(result, indent=2)}]
+            discovery_result = discovery.list_profiles(product=product)
+            result = [p.model_dump(mode="json") for p in discovery_result.items]
+            text = json.dumps(result, indent=2)
+            if discovery_result.errors:
+                warnings = "\n".join(f"- {e}" for e in discovery_result.errors)
+                text = f"WARNING: {len(discovery_result.errors)} profile(s) failed to parse:\n{warnings}\n\n{text}"
+            return [{"type": "text", "text": text}]
 
         elif name == "get_profile_details":
             profile_id = arguments["profile_id"]
@@ -1078,7 +1089,11 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
                 return [{"type": "text", "text": f"Control not found: {control_id}"}]
 
             summary = f"Control framework: {control.title}\n"
-            summary += f"Requirements: {len(control.controls)}\n\n"
+            summary += f"Requirements: {len(control.controls)}\n"
+            if control.parse_errors:
+                warnings = "\n".join(f"- {e}" for e in control.parse_errors)
+                summary += f"\nWARNING: {len(control.parse_errors)} requirement(s) failed to parse:\n{warnings}\n"
+            summary += "\n"
 
             return [
                 {

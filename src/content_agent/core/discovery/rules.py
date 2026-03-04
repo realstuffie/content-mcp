@@ -18,6 +18,7 @@ import yaml
 from content_agent.core.integration import get_content_repository
 from content_agent.core.integration.ssg_modules import get_ssg_modules
 from content_agent.models import (
+    DiscoveryResult,
     RuleDetails,
     RuleIdentifiers,
     RuleProductAvailability,
@@ -55,8 +56,12 @@ class RuleDiscovery:
         try:
             ssg_yaml = get_ssg_modules().yaml
             return ssg_yaml.open_and_expand(str(rule_path), substitutions)  # type: ignore[no-any-return]
-        except Exception:
+        except Exception as e:
             # Fallback to direct YAML loading if ssg expansion fails
+            logger.warning(
+                f"SSG Jinja2 expansion failed for {rule_path}, "
+                f"falling back to direct YAML loading: {e}"
+            )
             with open(rule_path) as f:
                 return yaml.load(f.read(), Loader=yaml.FullLoader)  # type: ignore[no-any-return]
 
@@ -66,7 +71,7 @@ class RuleDiscovery:
         product: str | None = None,
         severity: str | None = None,
         limit: int = 50,
-    ) -> list[RuleSearchResult]:
+    ) -> DiscoveryResult[RuleSearchResult]:
         """Search for rules matching criteria.
 
         Args:
@@ -76,7 +81,7 @@ class RuleDiscovery:
             limit: Maximum results to return
 
         Returns:
-            List of RuleSearchResult objects
+            DiscoveryResult with RuleSearchResult items and any parse errors
         """
         logger.debug(
             f"Searching rules: query={query}, product={product}, "
@@ -87,37 +92,42 @@ class RuleDiscovery:
         if self._rule_cache is None:
             self._build_rule_index()
 
-        results = []
+        discovery_result: DiscoveryResult[RuleSearchResult] = DiscoveryResult()
         query_lower = query.lower() if query else None
 
         for rule_id, rule_path in self._rule_cache.items():
-            # Quick ID match
-            if query_lower and query_lower in rule_id.lower():
-                result = self._load_search_result(rule_id, rule_path, product=product)
-                if result and self._matches_filters(result, product, severity):
-                    results.append(result)
-                    if len(results) >= limit:
-                        break
-                continue
-
-            # Load rule for full-text search
-            if query_lower:
-                result = self._load_search_result(rule_id, rule_path, product=product)
-                if result and self._matches_query(result, query_lower):
+            try:
+                # Quick ID match
+                if query_lower and query_lower in rule_id.lower():
+                    result = self._load_search_result(rule_id, rule_path, product=product)
                     if self._matches_filters(result, product, severity):
-                        results.append(result)
-                        if len(results) >= limit:
+                        discovery_result.items.append(result)
+                        if len(discovery_result.items) >= limit:
                             break
-            else:
-                # No query, just filter
-                result = self._load_search_result(rule_id, rule_path, product=product)
-                if result and self._matches_filters(result, product, severity):
-                    results.append(result)
-                    if len(results) >= limit:
-                        break
+                    continue
 
-        logger.info(f"Found {len(results)} rules matching search criteria")
-        return results
+                # Load rule for full-text search
+                if query_lower:
+                    result = self._load_search_result(rule_id, rule_path, product=product)
+                    if self._matches_query(result, query_lower):
+                        if self._matches_filters(result, product, severity):
+                            discovery_result.items.append(result)
+                            if len(discovery_result.items) >= limit:
+                                break
+                else:
+                    # No query, just filter
+                    result = self._load_search_result(rule_id, rule_path, product=product)
+                    if self._matches_filters(result, product, severity):
+                        discovery_result.items.append(result)
+                        if len(discovery_result.items) >= limit:
+                            break
+            except Exception as e:
+                error_msg = f"Failed to load rule {rule_id}: {e}"
+                logger.warning(error_msg)
+                discovery_result.errors.append(error_msg)
+
+        logger.info(f"Found {len(discovery_result.items)} rules matching search criteria")
+        return discovery_result
 
     def get_rule_details(
         self,
@@ -153,75 +163,70 @@ class RuleDiscovery:
             logger.warning(f"Rule not found: {rule_id}")
             return None
 
-        try:
-            # Load YAML with Jinja2 template expansion
-            data = self._load_rule_yaml(rule_path, product=product)
+        # Load YAML with Jinja2 template expansion
+        data = self._load_rule_yaml(rule_path, product=product)
 
-            rule_dir = rule_path.parent
+        rule_dir = rule_path.parent
 
-            # Load identifiers
-            identifiers = self._load_identifiers(data)
+        # Load identifiers
+        identifiers = self._load_identifiers(data)
 
-            # Load references
-            references = self._load_references(data)
+        # Load references
+        references = self._load_references(data)
 
-            # Extract products from identifiers
-            products = self._extract_products_from_identifiers(data)
+        # Extract products from identifiers
+        products = self._extract_products_from_identifiers(data)
 
-            # Detect available remediations
-            remediations = self._detect_remediations(rule_dir)
+        # Detect available remediations
+        remediations = self._detect_remediations(rule_dir)
 
-            # Detect available checks
-            checks = self._detect_checks(rule_dir)
+        # Detect available checks
+        checks = self._detect_checks(rule_dir)
 
-            # Find test scenarios
-            test_scenarios = self._find_test_scenarios(rule_dir)
+        # Find test scenarios
+        test_scenarios = self._find_test_scenarios(rule_dir)
 
-            # Get template info if applicable
-            template_info = None
-            if "template" in data:
-                template_info = data["template"]
+        # Get template info if applicable
+        template_info = None
+        if "template" in data:
+            template_info = data["template"]
 
-            # Get file modification time
-            last_modified = datetime.fromtimestamp(rule_path.stat().st_mtime)
+        # Get file modification time
+        last_modified = datetime.fromtimestamp(rule_path.stat().st_mtime)
 
-            # Handle platforms - can be a string or list
-            platforms = data.get("platform", data.get("platforms", []))
-            if isinstance(platforms, str):
-                platforms = [platforms]
+        # Handle platforms - can be a string or list
+        platforms = data.get("platform", data.get("platforms", []))
+        if isinstance(platforms, str):
+            platforms = [platforms]
 
-            # Create base details
-            details = RuleDetails(
-                rule_id=rule_id,
-                title=data.get("title", rule_id),
-                description=data.get("description", ""),
-                rationale=data.get("rationale"),
-                severity=data.get("severity", "unknown"),
-                identifiers=identifiers,
-                references=references,
-                products=products,
-                platforms=platforms,
-                remediations=remediations,
-                checks=checks,
-                test_scenarios=test_scenarios,
-                file_path=str(rule_path.relative_to(self.content_repo.path)),
-                rule_dir=str(rule_dir.relative_to(self.content_repo.path)),
-                last_modified=last_modified,
-                template=template_info,
-            )
+        # Create base details
+        details = RuleDetails(
+            rule_id=rule_id,
+            title=data.get("title", rule_id),
+            description=data.get("description", ""),
+            rationale=data.get("rationale"),
+            severity=data.get("severity", "unknown"),
+            identifiers=identifiers,
+            references=references,
+            products=products,
+            platforms=platforms,
+            remediations=remediations,
+            checks=checks,
+            test_scenarios=test_scenarios,
+            file_path=str(rule_path.relative_to(self.content_repo.path)),
+            rule_dir=str(rule_dir.relative_to(self.content_repo.path)),
+            last_modified=last_modified,
+            template=template_info,
+        )
 
-            # Include rendered content if requested
-            if include_rendered:
-                rendered_content = self._get_rendered_content(rule_id, product, rendered_detail)
-                if rendered_content:
-                    details.rendered = rendered_content
+        # Include rendered content if requested
+        if include_rendered:
+            rendered_content = self._get_rendered_content(rule_id, product, rendered_detail)
+            if rendered_content:
+                details.rendered = rendered_content
 
-            logger.debug(f"Loaded details for rule {rule_id}")
-            return details
-
-        except Exception as e:
-            logger.error(f"Failed to load rule {rule_id}: {e}")
-            return None
+        logger.debug(f"Loaded details for rule {rule_id}")
+        return details
 
     def _build_profile_rule_index(self) -> None:
         """Build reverse index mapping rule IDs to (product, profile_id) tuples."""
@@ -231,9 +236,9 @@ class RuleDiscovery:
         self._profile_rule_index = {}
 
         profile_discovery = ProfileDiscovery()
-        profiles = profile_discovery.list_profiles()
+        profiles_result = profile_discovery.list_profiles()
 
-        for profile_summary in profiles:
+        for profile_summary in profiles_result.items:
             product = profile_summary.product
             profile_id = profile_summary.profile_id
 
@@ -334,7 +339,7 @@ class RuleDiscovery:
 
     def _load_search_result(
         self, rule_id: str, rule_path: Path, product: str | None = None
-    ) -> RuleSearchResult | None:
+    ) -> RuleSearchResult:
         """Load rule as search result.
 
         Args:
@@ -343,25 +348,24 @@ class RuleDiscovery:
             product: Optional product ID for Jinja2 template expansion
 
         Returns:
-            RuleSearchResult or None
+            RuleSearchResult
+
+        Raises:
+            Exception: If YAML parsing or model construction fails
         """
-        try:
-            data = self._load_rule_yaml(rule_path, product=product)
+        data = self._load_rule_yaml(rule_path, product=product)
 
-            # Extract products from identifiers (e.g., cce@rhel8, stigid@rhel9)
-            products = self._extract_products_from_identifiers(data)
+        # Extract products from identifiers (e.g., cce@rhel8, stigid@rhel9)
+        products = self._extract_products_from_identifiers(data)
 
-            return RuleSearchResult(
-                rule_id=rule_id,
-                title=data.get("title", rule_id),
-                severity=data.get("severity", "unknown"),
-                description=data.get("description", "")[:200],  # Truncate for search
-                products=products,
-                file_path=str(rule_path.relative_to(self.content_repo.path)),
-            )
-        except Exception as e:
-            logger.debug(f"Failed to load search result for {rule_id}: {e}")
-            return None
+        return RuleSearchResult(
+            rule_id=rule_id,
+            title=data.get("title", rule_id),
+            severity=data.get("severity", "unknown"),
+            description=data.get("description", "")[:200],  # Truncate for search
+            products=products,
+            file_path=str(rule_path.relative_to(self.content_repo.path)),
+        )
 
     def _extract_products_from_identifiers(self, data: dict) -> list[str]:
         """Extract product list from identifiers and references.
@@ -646,7 +650,7 @@ def search_rules(
     product: str | None = None,
     severity: str | None = None,
     limit: int = 50,
-) -> list[RuleSearchResult]:
+) -> DiscoveryResult[RuleSearchResult]:
     """Search for rules matching criteria.
 
     Args:
@@ -656,7 +660,7 @@ def search_rules(
         limit: Maximum results
 
     Returns:
-        List of RuleSearchResult objects
+        DiscoveryResult with RuleSearchResult items and any parse errors
     """
     discovery = RuleDiscovery()
     return discovery.search_rules(query, product, severity, limit)

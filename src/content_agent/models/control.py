@@ -136,6 +136,10 @@ class ControlFile(BaseModel):
         default_factory=dict,
         description="Additional metadata",
     )
+    parse_errors: list[str] = Field(
+        default_factory=list,
+        description="Errors encountered while parsing individual requirements",
+    )
     source_dir: Path | None = Field(
         default=None,
         description="Directory from which this control file was loaded",

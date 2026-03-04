@@ -10,6 +10,7 @@ from content_agent.models.build import (
     RenderedRule,
     RenderSearchResult,
 )
+from content_agent.models.common import DiscoveryResult
 from content_agent.models.control import (
     ControlFile,
     ControlGenerationResult,
@@ -56,6 +57,8 @@ from content_agent.models.test import (
 )
 
 __all__ = [
+    # Common models
+    "DiscoveryResult",
     # Build models
     "BuildArtifact",
     "BuildJobId",

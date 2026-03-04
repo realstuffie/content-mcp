@@ -45,10 +45,10 @@ async def handle_resource_read(uri: str) -> str:
     if resource_type == "products":
         if len(path_parts) == 1:
             # List all products
-            products = discovery.list_products()
+            products_result = discovery.list_products()
             import json
 
-            return json.dumps([p.model_dump() for p in products], indent=2)
+            return json.dumps([p.model_dump() for p in products_result.items], indent=2)
         elif len(path_parts) == 2:
             # Get specific product
             product_id = path_parts[1]
@@ -64,10 +64,10 @@ async def handle_resource_read(uri: str) -> str:
     elif resource_type == "rules":
         if len(path_parts) == 1:
             # List all rules (limited)
-            rules = discovery.search_rules(limit=100)
+            rules_result = discovery.search_rules(limit=100)
             import json
 
-            return json.dumps([r.model_dump() for r in rules], indent=2)
+            return json.dumps([r.model_dump() for r in rules_result.items], indent=2)
         elif len(path_parts) == 2:
             # Get specific rule
             rule_id = path_parts[1]
@@ -102,10 +102,10 @@ async def handle_resource_read(uri: str) -> str:
     elif resource_type == "profiles":
         if len(path_parts) == 1:
             # List all profiles
-            profiles = discovery.list_profiles()
+            profiles_result = discovery.list_profiles()
             import json
 
-            return json.dumps([p.model_dump() for p in profiles], indent=2)
+            return json.dumps([p.model_dump() for p in profiles_result.items], indent=2)
         elif len(path_parts) == 3:
             # Get specific profile (product/profile_id)
             product = path_parts[1]

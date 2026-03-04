@@ -50,9 +50,13 @@ def _write_control_yaml(path: Path, control_id: str, title: str, controls: list 
 
 def _mock_product_discovery(known_products: list[str]):
     """Create a mock ProductDiscovery that returns given product IDs."""
+    from content_agent.models.common import DiscoveryResult
+
     mock_cls = MagicMock()
     mock_instance = MagicMock()
-    mock_instance.list_products.return_value = [MagicMock(product_id=pid) for pid in known_products]
+    mock_instance.list_products.return_value = DiscoveryResult(
+        items=[MagicMock(product_id=pid) for pid in known_products]
+    )
     mock_cls.return_value = mock_instance
     return mock_cls
 

@@ -53,7 +53,7 @@ class ControlDiscovery:
             from content_agent.core.discovery.products import ProductDiscovery
 
             product_discovery = ProductDiscovery()
-            known_products = [p.product_id for p in product_discovery.list_products()]
+            known_products = [p.product_id for p in product_discovery.list_products().items]
             if product not in known_products:
                 raise ValueError(
                     f"Unknown product '{product}'. "
@@ -67,7 +67,7 @@ class ControlDiscovery:
             from content_agent.core.discovery.products import ProductDiscovery
 
             product_discovery = ProductDiscovery()
-            known_products = [p.product_id for p in product_discovery.list_products()]
+            known_products = [p.product_id for p in product_discovery.list_products().items]
             for pid in sorted(known_products):
                 product_controls = self.content_repo.path / "products" / pid / "controls"
                 if product_controls.exists():
@@ -166,6 +166,8 @@ class ControlDiscovery:
             with open(file_path) as f:
                 data = yaml.safe_load(f)
 
+            parse_errors: list[str] = []
+
             # Parse included files if present
             if "includes" in data and data["includes"]:
                 # Load included requirement files
@@ -175,9 +177,13 @@ class ControlDiscovery:
                 for include_path in data["includes"]:
                     full_path = base_dir / include_path
                     if full_path.exists():
-                        req = self._parse_requirement_file(full_path)
-                        if req:
+                        try:
+                            req = self._parse_requirement_file(full_path)
                             controls.append(req)
+                        except Exception as e:
+                            error_msg = f"Failed to parse requirement file {full_path}: {e}"
+                            logger.warning(error_msg)
+                            parse_errors.append(error_msg)
                     else:
                         logger.warning(f"Included file not found: {full_path}")
 
@@ -189,15 +195,21 @@ class ControlDiscovery:
                 controls_subdir = file_path.parent / data["controls_dir"]
                 if controls_subdir.exists() and controls_subdir.is_dir():
                     for ctrl_file in sorted(controls_subdir.glob("*.yml")):
-                        req = self._parse_requirement_file(ctrl_file)
-                        if req:
+                        try:
+                            req = self._parse_requirement_file(ctrl_file)
                             controls.append(req)
+                        except Exception as e:
+                            error_msg = f"Failed to parse requirement file {ctrl_file}: {e}"
+                            logger.warning(error_msg)
+                            parse_errors.append(error_msg)
                 else:
                     logger.warning(f"Controls directory not found: {controls_subdir}")
 
                 if "controls" not in data:
                     data["controls"] = []
                 data["controls"].extend(controls)
+
+            data["parse_errors"] = parse_errors
 
             # Set source_dir
             if source_dir is not None:
@@ -653,24 +665,22 @@ class ControlDiscovery:
         logger.info(f"Found {len(results)} unmapped requirements in '{control_id}'")
         return results
 
-    def _parse_requirement_file(self, file_path: Path) -> ControlRequirement | None:
+    def _parse_requirement_file(self, file_path: Path) -> ControlRequirement:
         """Parse individual requirement file.
 
         Args:
             file_path: Path to requirement file
 
         Returns:
-            ControlRequirement object, or None if parsing fails
+            ControlRequirement object
+
+        Raises:
+            Exception: If YAML parsing or model construction fails
         """
-        try:
-            with open(file_path) as f:
-                data = yaml.safe_load(f)
+        with open(file_path) as f:
+            data = yaml.safe_load(f)
 
-            return ControlRequirement(**data)
-
-        except Exception as e:
-            logger.error(f"Failed to parse requirement file {file_path}: {e}")
-            return None
+        return ControlRequirement(**data)
 
 
 def list_controls(product: str | None = None) -> list[str]:

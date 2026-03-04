@@ -112,8 +112,8 @@ class TemplateDiscovery:
                 lines = content.strip().split("\n\n")
                 if lines:
                     return lines[0].replace("\n", " ").strip()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to read template README {readme}: {e}")
 
         return None
 
@@ -277,8 +277,8 @@ class TemplateDiscovery:
                         # Remove rule_id from example
                         example = {k: v for k, v in row.items() if k != "rule_id"}
                         return example if example else None
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to read template CSV example {csv_files[0]}: {e}")
 
         return None
 

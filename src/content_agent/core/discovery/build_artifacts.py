@@ -75,17 +75,13 @@ class BuildArtifactsDiscovery:
             logger.debug(f"Rule {rule_id} not found in build for {product}")
             return None
 
-        try:
-            with open(rule_json_path) as f:
-                rule_data = json.load(f)
+        with open(rule_json_path) as f:
+            rule_data = json.load(f)
 
-            # Convert JSON back to YAML-like format for consistency
-            import yaml
+        # Convert JSON back to YAML-like format for consistency
+        import yaml
 
-            rendered_yaml = yaml.dump(rule_data, default_flow_style=False, sort_keys=False)
-        except Exception as e:
-            logger.warning(f"Failed to read rendered rule JSON: {e}")
-            return None
+        rendered_yaml = yaml.dump(rule_data, default_flow_style=False, sort_keys=False)
 
         # Read rendered OVAL
         rendered_oval = None
