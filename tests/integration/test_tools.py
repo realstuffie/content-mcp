@@ -93,6 +93,55 @@ severity: invalid_severity
         assert len(result) == 1
         assert "Unknown tool" in result[0]["text"]
 
+    @pytest.mark.asyncio
+    async def test_get_control_rule_index_tool(self):
+        """Test get_control_rule_index tool."""
+        result = await handle_tool_call("get_control_rule_index", {})
+
+        assert len(result) == 1
+        assert result[0]["type"] == "text"
+        response_text = result[0]["text"]
+        assert "Control rule index" in response_text
+
+    @pytest.mark.asyncio
+    async def test_get_control_rule_index_with_filter(self):
+        """Test get_control_rule_index tool with control_ids filter."""
+        result = await handle_tool_call(
+            "get_control_rule_index",
+            {"control_ids": ["nonexistent_control"]},
+        )
+
+        assert len(result) == 1
+        assert result[0]["type"] == "text"
+        # Should return valid JSON with zero results
+        response_text = result[0]["text"]
+        assert "0 controls" in response_text
+
+    @pytest.mark.asyncio
+    async def test_find_similar_requirements_tool(self):
+        """Test find_similar_requirements tool."""
+        result = await handle_tool_call(
+            "find_similar_requirements",
+            {"requirement_text": "password complexity enforcement"},
+        )
+
+        assert len(result) == 1
+        assert result[0]["type"] == "text"
+        response_text = result[0]["text"]
+        assert "similar requirements" in response_text
+
+    @pytest.mark.asyncio
+    async def test_get_rule_product_availability_tool_not_found(self):
+        """Test get_rule_product_availability tool with nonexistent rule."""
+        result = await handle_tool_call(
+            "get_rule_product_availability",
+            {"rule_id": "nonexistent_rule_xyz"},
+        )
+
+        assert len(result) == 1
+        assert result[0]["type"] == "text"
+        assert "not found" in result[0]["text"].lower() or "Rule not found" in result[0]["text"]
+
 
 class TestToolValidation:
     """Test tool parameter validation (unit-level)."""

@@ -386,6 +386,15 @@ TOOLS = [
                     "description": "Minimum confidence score 0.0-1.0 (default: 0.3)",
                     "default": 0.3,
                 },
+                "cross_reference": {
+                    "type": "boolean",
+                    "description": "Include cross-framework evidence from similar requirements in other control files (default: false)",
+                    "default": False,
+                },
+                "target_product": {
+                    "type": "string",
+                    "description": "Prioritize rules with identifiers for this product (e.g., 'rhel9')",
+                },
             },
             "required": ["requirement_text"],
         },
@@ -444,6 +453,68 @@ TOOLS = [
                 },
             },
             "required": ["control_id"],
+        },
+    },
+    {
+        "name": "get_control_rule_index",
+        "description": "Build a complete index of all requirements and rule mappings across all control frameworks. Useful for cross-framework rule discovery.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "include_unmapped": {
+                    "type": "boolean",
+                    "description": "Include requirements without rule mappings (default: true)",
+                    "default": True,
+                },
+                "control_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional list of control framework IDs to index (default: all)",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "find_similar_requirements",
+        "description": "Find requirements with similar text across all control frameworks using text similarity. Useful for discovering how different frameworks address the same security concern.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "requirement_text": {
+                    "type": "string",
+                    "description": "Requirement text to search for similar requirements",
+                },
+                "min_similarity": {
+                    "type": "number",
+                    "description": "Minimum similarity score 0.0-1.0 (default: 0.2)",
+                    "default": 0.2,
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Maximum number of results (default: 20)",
+                    "default": 20,
+                },
+                "exclude_control_id": {
+                    "type": "string",
+                    "description": "Optional control framework to exclude from results",
+                },
+            },
+            "required": ["requirement_text"],
+        },
+    },
+    {
+        "name": "get_rule_product_availability",
+        "description": "Check which products include a given rule, via identifiers, profile selections, and build artifacts. Useful for cross-product compliance analysis.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "rule_id": {
+                    "type": "string",
+                    "description": "Rule identifier",
+                },
+            },
+            "required": ["rule_id"],
         },
     },
     {
@@ -772,6 +843,8 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
             requirement_text = arguments["requirement_text"]
             max_suggestions = arguments.get("max_suggestions", 10)
             min_confidence = arguments.get("min_confidence", 0.3)
+            cross_reference = arguments.get("cross_reference", False)
+            target_product = arguments.get("target_product")
 
             # Check AI settings
             settings = get_settings()
@@ -797,6 +870,8 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
                 requirement_text=requirement_text,
                 max_suggestions=max_suggestions,
                 min_confidence=min_confidence,
+                cross_reference=cross_reference,
+                target_product=target_product,
             )
 
             result = [s.model_dump(mode="json") for s in suggestions]
@@ -898,6 +973,71 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
             summary = f"Found {len(requirements)} matching requirements\n\n"
 
             return [{"type": "text", "text": summary + json.dumps(result, indent=2)}]
+
+        elif name == "get_control_rule_index":
+            from content_agent.core.discovery.controls import (
+                get_control_rule_index,
+            )
+
+            include_unmapped = arguments.get("include_unmapped", True)
+            control_ids = arguments.get("control_ids")
+
+            index = get_control_rule_index(
+                include_unmapped=include_unmapped, control_ids=control_ids
+            )
+            summary = (
+                f"Control rule index: {index.total_controls} controls, "
+                f"{index.total_requirements} requirements, "
+                f"{index.total_mapped_rules} unique mapped rules\n\n"
+            )
+            return [
+                {
+                    "type": "text",
+                    "text": summary + json.dumps(index.model_dump(mode="json"), indent=2),
+                }
+            ]
+
+        elif name == "find_similar_requirements":
+            from content_agent.core.discovery.controls import (
+                find_similar_requirements,
+            )
+
+            requirement_text = arguments["requirement_text"]
+            min_similarity = arguments.get("min_similarity", 0.2)
+            max_results = arguments.get("max_results", 20)
+            exclude_control_id = arguments.get("exclude_control_id")
+
+            results = find_similar_requirements(
+                requirement_text=requirement_text,
+                min_similarity=min_similarity,
+                max_results=max_results,
+                exclude_control_id=exclude_control_id,
+            )
+            result = [r.model_dump(mode="json") for r in results]
+            summary = f"Found {len(results)} similar requirements\n\n"
+            return [{"type": "text", "text": summary + json.dumps(result, indent=2)}]
+
+        elif name == "get_rule_product_availability":
+            from content_agent.core.discovery.rules import (
+                get_rule_product_availability,
+            )
+
+            rule_id = arguments["rule_id"]
+            availability = get_rule_product_availability(rule_id)
+            if not availability:
+                return [{"type": "text", "text": f"Rule not found: {rule_id}"}]
+
+            summary = (
+                f"Product availability for rule '{rule_id}': "
+                f"{len(availability.products_with_identifiers)} products with identifiers, "
+                f"{len(availability.products_in_profiles)} products in profiles\n\n"
+            )
+            return [
+                {
+                    "type": "text",
+                    "text": summary + json.dumps(availability.model_dump(mode="json"), indent=2),
+                }
+            ]
 
         else:
             raise ValueError(f"Unknown tool: {name}")

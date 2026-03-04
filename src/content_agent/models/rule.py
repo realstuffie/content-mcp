@@ -149,6 +149,30 @@ class RuleDetails(BaseModel):
         }
 
 
+class RuleProductAvailability(BaseModel):
+    """Cross-product availability information for a rule."""
+
+    rule_id: str = Field(..., description="Rule identifier")
+    products_with_identifiers: list[str] = Field(
+        default_factory=list,
+        description="Products from cce@/stigid@ keys in rule.yml",
+    )
+    products_in_profiles: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description="Product -> list of profile names that select this rule",
+    )
+    platforms: list[str] = Field(
+        default_factory=list, description="Platform constraints from rule.yml"
+    )
+    template: dict[str, Any] | None = Field(
+        default=None, description="Template info if rule is templated"
+    )
+    has_build_artifacts: dict[str, bool] = Field(
+        default_factory=dict,
+        description="Product -> whether rendered content exists in build/",
+    )
+
+
 class ValidationError(BaseModel):
     """Validation error details."""
 

@@ -6,7 +6,13 @@ from pathlib import Path
 import yaml
 
 from content_agent.core.integration import get_content_repository
-from content_agent.models.control import ControlFile, ControlRequirement
+from content_agent.models.control import (
+    ControlFile,
+    ControlRequirement,
+    ControlRuleIndex,
+    IndexedRequirement,
+    SimilarRequirement,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +94,22 @@ class ControlDiscovery:
 
                 data["controls"] = controls
 
+            # Handle controls_dir pattern (subdirectory of individual control YAML files)
+            elif "controls_dir" in data and data["controls_dir"]:
+                controls = []
+                controls_subdir = file_path.parent / data["controls_dir"]
+                if controls_subdir.exists() and controls_subdir.is_dir():
+                    for ctrl_file in sorted(controls_subdir.glob("*.yml")):
+                        req = self._parse_requirement_file(ctrl_file)
+                        if req:
+                            controls.append(req)
+                else:
+                    logger.warning(f"Controls directory not found: {controls_subdir}")
+
+                if "controls" not in data:
+                    data["controls"] = []
+                data["controls"].extend(controls)
+
             # Parse control file
             return ControlFile(**data)
 
@@ -137,6 +159,257 @@ class ControlDiscovery:
 
         logger.info(f"Found {len(results)} matching requirements")
         return results
+
+    def _flatten_controls(self, controls: list[ControlRequirement]) -> list[ControlRequirement]:
+        """Recursively flatten nested control structures.
+
+        Args:
+            controls: List of control requirements (may contain nested controls)
+
+        Returns:
+            Flat list of all leaf-level requirements
+        """
+        flat: list[ControlRequirement] = []
+        for ctrl in controls:
+            flat.append(ctrl)
+        return flat
+
+    def get_control_rule_index(
+        self,
+        include_unmapped: bool = True,
+        control_ids: list[str] | None = None,
+    ) -> ControlRuleIndex:
+        """Build complete index of all requirements with rule mappings.
+
+        Args:
+            include_unmapped: Whether to include requirements without rule mappings
+            control_ids: Optional list of control framework IDs to index
+
+        Returns:
+            ControlRuleIndex with all indexed requirements
+        """
+        logger.debug(
+            f"Building control rule index: include_unmapped={include_unmapped}, "
+            f"control_ids={control_ids}"
+        )
+
+        if control_ids is not None:
+            ids_to_process = control_ids
+        else:
+            ids_to_process = self.list_controls()
+
+        all_requirements: list[IndexedRequirement] = []
+        all_rule_ids: set[str] = set()
+        controls_indexed = 0
+
+        for control_id in ids_to_process:
+            control_file = self.get_control_details(control_id)
+            if control_file is None:
+                continue
+
+            controls_indexed += 1
+            flat_controls = self._flatten_controls(control_file.controls)
+
+            for req in flat_controls:
+                if not include_unmapped and not req.rules:
+                    continue
+
+                description = req.description[:300] if req.description else ""
+
+                indexed = IndexedRequirement(
+                    control_id=control_id,
+                    requirement_id=req.id,
+                    title=req.title,
+                    description=description,
+                    rules=req.rules,
+                    status=req.status,
+                    levels=req.levels,
+                )
+                all_requirements.append(indexed)
+                all_rule_ids.update(req.rules)
+
+        index = ControlRuleIndex(
+            total_controls=controls_indexed,
+            total_requirements=len(all_requirements),
+            total_mapped_rules=len(all_rule_ids),
+            requirements=all_requirements,
+        )
+
+        logger.info(
+            f"Built control rule index: {index.total_controls} controls, "
+            f"{index.total_requirements} requirements, "
+            f"{index.total_mapped_rules} mapped rules"
+        )
+        return index
+
+    # Stopwords for compliance document similarity
+    _STOPWORDS = frozenset(
+        {
+            "a",
+            "an",
+            "the",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "could",
+            "should",
+            "shall",
+            "may",
+            "might",
+            "must",
+            "can",
+            "need",
+            "to",
+            "of",
+            "in",
+            "for",
+            "on",
+            "with",
+            "at",
+            "by",
+            "from",
+            "as",
+            "into",
+            "through",
+            "during",
+            "before",
+            "after",
+            "above",
+            "below",
+            "between",
+            "and",
+            "but",
+            "or",
+            "nor",
+            "not",
+            "no",
+            "so",
+            "if",
+            "then",
+            "than",
+            "that",
+            "this",
+            "these",
+            "those",
+            "it",
+            "its",
+            "all",
+            "each",
+            "every",
+            "any",
+            "both",
+            "such",
+            "when",
+            "where",
+            "which",
+            "who",
+            "whom",
+            "how",
+            "what",
+            "ensure",
+            "operating",
+            "system",
+            "information",
+        }
+    )
+
+    def _tokenize(self, text: str) -> set[str]:
+        """Tokenize and normalize text for similarity comparison.
+
+        Args:
+            text: Text to tokenize
+
+        Returns:
+            Set of normalized tokens
+        """
+        import re
+
+        text = re.sub(r"[^a-z0-9\s]", " ", text.lower())
+        tokens = text.split()
+        return {t for t in tokens if t not in self._STOPWORDS and len(t) > 2}
+
+    def _jaccard_similarity(self, set_a: set[str], set_b: set[str]) -> float:
+        """Compute Jaccard similarity between two token sets.
+
+        Args:
+            set_a: First token set
+            set_b: Second token set
+
+        Returns:
+            Jaccard similarity coefficient (0.0 to 1.0)
+        """
+        if not set_a or not set_b:
+            return 0.0
+        intersection = set_a & set_b
+        union = set_a | set_b
+        return len(intersection) / len(union)
+
+    def find_similar_requirements(
+        self,
+        requirement_text: str,
+        min_similarity: float = 0.2,
+        max_results: int = 20,
+        exclude_control_id: str | None = None,
+    ) -> list[SimilarRequirement]:
+        """Find requirements with similar text across all control files.
+
+        Args:
+            requirement_text: Text to search for similar requirements
+            min_similarity: Minimum Jaccard similarity threshold
+            max_results: Maximum number of results to return
+            exclude_control_id: Optional control framework to exclude
+
+        Returns:
+            List of SimilarRequirement objects sorted by similarity descending
+        """
+        logger.debug(
+            f"Finding similar requirements: min_similarity={min_similarity}, "
+            f"max_results={max_results}, exclude={exclude_control_id}"
+        )
+
+        query_tokens = self._tokenize(requirement_text)
+        if not query_tokens:
+            return []
+
+        index = self.get_control_rule_index(include_unmapped=True)
+        results: list[SimilarRequirement] = []
+
+        for req in index.requirements:
+            if exclude_control_id and req.control_id == exclude_control_id:
+                continue
+
+            req_tokens = self._tokenize(req.title + " " + req.description)
+            similarity = self._jaccard_similarity(query_tokens, req_tokens)
+
+            if similarity >= min_similarity:
+                matching = sorted(query_tokens & req_tokens)
+                results.append(
+                    SimilarRequirement(
+                        control_id=req.control_id,
+                        requirement_id=req.requirement_id,
+                        title=req.title,
+                        description=req.description,
+                        rules=req.rules,
+                        similarity_score=round(similarity, 4),
+                        matching_terms=matching,
+                    )
+                )
+
+        results.sort(key=lambda r: r.similarity_score, reverse=True)
+        logger.info(f"Found {len(results)} similar requirements (returning top {max_results})")
+        return results[:max_results]
 
     def _parse_requirement_file(self, file_path: Path) -> ControlRequirement | None:
         """Parse individual requirement file.
@@ -193,3 +466,43 @@ def search_controls(query: str, control_id: str | None = None) -> list[ControlRe
     """
     discovery = ControlDiscovery()
     return discovery.search_controls(query, control_id)
+
+
+def get_control_rule_index(
+    include_unmapped: bool = True,
+    control_ids: list[str] | None = None,
+) -> ControlRuleIndex:
+    """Build complete index of all requirements with rule mappings.
+
+    Args:
+        include_unmapped: Whether to include requirements without rule mappings
+        control_ids: Optional list of control framework IDs to index
+
+    Returns:
+        ControlRuleIndex with all indexed requirements
+    """
+    discovery = ControlDiscovery()
+    return discovery.get_control_rule_index(include_unmapped, control_ids)
+
+
+def find_similar_requirements(
+    requirement_text: str,
+    min_similarity: float = 0.2,
+    max_results: int = 20,
+    exclude_control_id: str | None = None,
+) -> list[SimilarRequirement]:
+    """Find requirements with similar text across all control files.
+
+    Args:
+        requirement_text: Text to search for similar requirements
+        min_similarity: Minimum Jaccard similarity threshold
+        max_results: Maximum number of results to return
+        exclude_control_id: Optional control framework to exclude
+
+    Returns:
+        List of SimilarRequirement objects sorted by similarity descending
+    """
+    discovery = ControlDiscovery()
+    return discovery.find_similar_requirements(
+        requirement_text, min_similarity, max_results, exclude_control_id
+    )

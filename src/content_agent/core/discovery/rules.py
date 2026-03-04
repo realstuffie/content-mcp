@@ -19,6 +19,7 @@ from content_agent.core.integration import get_content_repository
 from content_agent.models import (
     RuleDetails,
     RuleIdentifiers,
+    RuleProductAvailability,
     RuleReferences,
     RuleRenderedContent,
     RuleSearchResult,
@@ -34,6 +35,7 @@ class RuleDiscovery:
         """Initialize rule discovery."""
         self.content_repo = get_content_repository()
         self._rule_cache: dict[str, Path] | None = None
+        self._profile_rule_index: dict[str, list[tuple[str, str]]] | None = None
 
     def search_rules(
         self,
@@ -199,6 +201,92 @@ class RuleDiscovery:
         except Exception as e:
             logger.error(f"Failed to load rule {rule_id}: {e}")
             return None
+
+    def _build_profile_rule_index(self) -> None:
+        """Build reverse index mapping rule IDs to (product, profile_id) tuples."""
+        from content_agent.core.discovery.profiles import ProfileDiscovery
+
+        logger.info("Building profile-to-rule reverse index")
+        self._profile_rule_index = {}
+
+        profile_discovery = ProfileDiscovery()
+        profiles = profile_discovery.list_profiles()
+
+        for profile_summary in profiles:
+            product = profile_summary.product
+            profile_id = profile_summary.profile_id
+
+            profile = profile_discovery.get_profile_details(profile_id, product)
+            if not profile:
+                continue
+
+            for selection in profile.selections:
+                # Only match direct rule IDs, not control references like "anssi:all:minimal"
+                if ":" in selection:
+                    continue
+                # Skip unselection directives
+                if selection.startswith("!"):
+                    continue
+
+                if selection not in self._profile_rule_index:
+                    self._profile_rule_index[selection] = []
+                self._profile_rule_index[selection].append((product, profile_id))
+
+        logger.info(
+            f"Profile rule index built: {len(self._profile_rule_index)} rules across profiles"
+        )
+
+    def get_rule_product_availability(self, rule_id: str) -> RuleProductAvailability | None:
+        """Determine which products include a rule and in which profiles.
+
+        Args:
+            rule_id: Rule identifier
+
+        Returns:
+            RuleProductAvailability or None if rule not found
+        """
+        logger.debug(f"Getting product availability for rule: {rule_id}")
+
+        # Get rule details (without rendered content for speed)
+        rule = self.get_rule_details(rule_id, include_rendered=False)
+        if not rule:
+            return None
+
+        # Build profile index if not cached
+        if self._profile_rule_index is None:
+            self._build_profile_rule_index()
+
+        assert self._profile_rule_index is not None  # for mypy
+
+        # Get products from profiles
+        products_in_profiles: dict[str, list[str]] = {}
+        profile_entries = self._profile_rule_index.get(rule_id, [])
+        for product, profile_id in profile_entries:
+            if product not in products_in_profiles:
+                products_in_profiles[product] = []
+            if profile_id not in products_in_profiles[product]:
+                products_in_profiles[product].append(profile_id)
+
+        # Check build artifacts
+        has_build_artifacts: dict[str, bool] = {}
+        try:
+            from content_agent.core.discovery import build_artifacts
+
+            built_products = build_artifacts.list_built_products()
+            for product in built_products:
+                rendered = build_artifacts.get_rendered_rule(product, rule_id)
+                has_build_artifacts[product] = rendered is not None
+        except Exception as e:
+            logger.debug(f"Failed to check build artifacts for {rule_id}: {e}")
+
+        return RuleProductAvailability(
+            rule_id=rule_id,
+            products_with_identifiers=rule.products,
+            products_in_profiles=products_in_profiles,
+            platforms=rule.platforms,
+            template=rule.template,
+            has_build_artifacts=has_build_artifacts,
+        )
 
     def _build_rule_index(self) -> None:
         """Build index of all rules in the repository."""
@@ -574,3 +662,16 @@ def get_rule_details(
     """
     discovery = RuleDiscovery()
     return discovery.get_rule_details(rule_id, include_rendered, product, rendered_detail)
+
+
+def get_rule_product_availability(rule_id: str) -> RuleProductAvailability | None:
+    """Determine which products include a rule and in which profiles.
+
+    Args:
+        rule_id: Rule identifier
+
+    Returns:
+        RuleProductAvailability or None if rule not found
+    """
+    discovery = RuleDiscovery()
+    return discovery.get_rule_product_availability(rule_id)

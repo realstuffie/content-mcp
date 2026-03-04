@@ -16,12 +16,15 @@ from content_agent.models.control import (
     ControlLevel,
     ControlRequirement,
     ControlReviewReport,
+    ControlRuleIndex,
     ControlUpdateResult,
     ControlValidationResult,
     DocumentSection,
     ExtractedRequirement,
+    IndexedRequirement,
     ParsedDocument,
     RuleSuggestion,
+    SimilarRequirement,
 )
 from content_agent.models.product import ProductDetails, ProductStats, ProductSummary
 from content_agent.models.profile import (
@@ -35,6 +38,7 @@ from content_agent.models.profile import (
 from content_agent.models.rule import (
     RuleDetails,
     RuleIdentifiers,
+    RuleProductAvailability,
     RuleReferences,
     RuleRenderedContent,
     RuleSearchResult,
@@ -65,12 +69,15 @@ __all__ = [
     "ControlLevel",
     "ControlRequirement",
     "ControlReviewReport",
+    "ControlRuleIndex",
     "ControlUpdateResult",
     "ControlValidationResult",
     "DocumentSection",
     "ExtractedRequirement",
+    "IndexedRequirement",
     "ParsedDocument",
     "RuleSuggestion",
+    "SimilarRequirement",
     # Product models
     "ProductDetails",
     "ProductStats",
@@ -85,6 +92,7 @@ __all__ = [
     # Rule models
     "RuleDetails",
     "RuleIdentifiers",
+    "RuleProductAvailability",
     "RuleReferences",
     "RuleRenderedContent",
     "RuleSearchResult",

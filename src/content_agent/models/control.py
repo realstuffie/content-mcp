@@ -294,6 +294,43 @@ class ControlReviewReport(BaseModel):
     )
 
 
+class IndexedRequirement(BaseModel):
+    """A requirement with its parent control context, for cross-framework indexing."""
+
+    control_id: str = Field(..., description="Parent control framework ID (e.g., 'anssi', 'hipaa')")
+    requirement_id: str = Field(
+        ..., description="Requirement ID within the control (e.g., 'R1', 'AC-2(5)')"
+    )
+    title: str = Field(..., description="Requirement title")
+    description: str = Field(..., description="Requirement description (truncated for index)")
+    rules: list[str] = Field(default_factory=list, description="Mapped rule IDs")
+    status: str = Field(default="pending", description="Implementation status")
+    levels: list[str] = Field(default_factory=list, description="Compliance levels")
+
+
+class ControlRuleIndex(BaseModel):
+    """Complete index of all requirements and rule mappings across control frameworks."""
+
+    total_controls: int = Field(..., description="Number of control frameworks indexed")
+    total_requirements: int = Field(..., description="Total requirements across all frameworks")
+    total_mapped_rules: int = Field(..., description="Total unique rule IDs mapped")
+    requirements: list[IndexedRequirement] = Field(
+        default_factory=list, description="All indexed requirements"
+    )
+
+
+class SimilarRequirement(BaseModel):
+    """A requirement found via text similarity search."""
+
+    control_id: str = Field(..., description="Parent control framework ID")
+    requirement_id: str = Field(..., description="Requirement ID")
+    title: str = Field(..., description="Requirement title")
+    description: str = Field(..., description="Requirement description")
+    rules: list[str] = Field(default_factory=list, description="Mapped rule IDs")
+    similarity_score: float = Field(..., ge=0.0, le=1.0, description="Similarity score")
+    matching_terms: list[str] = Field(default_factory=list, description="Overlapping keywords")
+
+
 class ControlUpdateResult(BaseModel):
     """Result of updating an existing control file."""
 

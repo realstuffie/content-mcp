@@ -66,6 +66,8 @@ Be conservative - only suggest rules with confidence >= 0.3. Limit to top 10 mos
         requirement: ControlRequirement,
         max_suggestions: int = 10,
         min_confidence: float = 0.3,
+        cross_reference: bool = False,
+        target_product: str | None = None,
     ) -> list[RuleSuggestion]:
         """Suggest rules for a control requirement.
 
@@ -73,15 +75,23 @@ Be conservative - only suggest rules with confidence >= 0.3. Limit to top 10 mos
             requirement: Control requirement to map
             max_suggestions: Maximum number of suggestions
             min_confidence: Minimum confidence score
+            cross_reference: Include rules from similar requirements in other frameworks
+            target_product: Prioritize rules with identifiers for this product
 
         Returns:
             List of rule suggestions sorted by confidence (descending)
         """
         # Build context about available rules
-        rules_context = self._build_rules_context()
+        rules_context = self._build_rules_context(target_product=target_product)
 
         # Build prompt
         user_prompt = self._build_mapping_prompt(requirement, rules_context)
+
+        # Append cross-framework evidence if requested
+        if cross_reference:
+            cross_ref_section = self._build_cross_reference_context(requirement.description)
+            if cross_ref_section:
+                user_prompt += "\n\n" + cross_ref_section
 
         # Get suggestions from Claude
         response = self.client.create_message(
@@ -114,6 +124,8 @@ Be conservative - only suggest rules with confidence >= 0.3. Limit to top 10 mos
         requirement_text: str,
         max_suggestions: int = 10,
         min_confidence: float = 0.3,
+        cross_reference: bool = False,
+        target_product: str | None = None,
     ) -> list[RuleSuggestion]:
         """Suggest rules for requirement text.
 
@@ -121,6 +133,8 @@ Be conservative - only suggest rules with confidence >= 0.3. Limit to top 10 mos
             requirement_text: Requirement text
             max_suggestions: Maximum number of suggestions
             min_confidence: Minimum confidence score
+            cross_reference: Include rules from similar requirements in other frameworks
+            target_product: Prioritize rules with identifiers for this product
 
         Returns:
             List of rule suggestions
@@ -132,13 +146,16 @@ Be conservative - only suggest rules with confidence >= 0.3. Limit to top 10 mos
             description=requirement_text,
         )
 
-        return self.suggest_rules(temp_requirement, max_suggestions, min_confidence)
+        return self.suggest_rules(
+            temp_requirement, max_suggestions, min_confidence, cross_reference, target_product
+        )
 
-    def _build_rules_context(self, limit: int = 100) -> str:
+    def _build_rules_context(self, limit: int = 100, target_product: str | None = None) -> str:
         """Build context string with available rules.
 
         Args:
             limit: Maximum number of rules to include
+            target_product: If set, prioritize rules with identifiers for this product
 
         Returns:
             Formatted rules context
@@ -149,23 +166,103 @@ Be conservative - only suggest rules with confidence >= 0.3. Limit to top 10 mos
         if not rules:
             return "No rules available in the content repository."
 
-        context_parts = [f"Available rules (showing {len(rules)}):", ""]
+        if target_product:
+            # Sort rules: those matching target_product first
+            target_rules = [r for r in rules if target_product in r.products]
+            other_rules = [r for r in rules if target_product not in r.products]
 
-        for rule in rules:
-            context_parts.append(f"- {rule.rule_id}:")
-            if rule.title:
-                context_parts.append(f"  Title: {rule.title}")
-            if rule.description:
-                # Truncate long descriptions
-                desc = (
-                    rule.description[:200] + "..."
-                    if len(rule.description) > 200
-                    else rule.description
-                )
-                context_parts.append(f"  Description: {desc}")
-            context_parts.append("")
+            context_parts = [
+                f"Available rules for {target_product} ({len(target_rules)} matching, "
+                f"{len(other_rules)} from other products):",
+                "",
+            ]
+
+            for rule in target_rules:
+                context_parts.append(f"- {rule.rule_id} [TARGET PRODUCT]:")
+                if rule.title:
+                    context_parts.append(f"  Title: {rule.title}")
+                if rule.description:
+                    desc = (
+                        rule.description[:200] + "..."
+                        if len(rule.description) > 200
+                        else rule.description
+                    )
+                    context_parts.append(f"  Description: {desc}")
+                context_parts.append("")
+
+            if other_rules:
+                context_parts.append("Rules available in other products (may need porting):")
+                context_parts.append("")
+                for rule in other_rules:
+                    context_parts.append(
+                        f"- {rule.rule_id} (products: {', '.join(rule.products)}):"
+                    )
+                    if rule.title:
+                        context_parts.append(f"  Title: {rule.title}")
+                    context_parts.append("")
+        else:
+            context_parts = [f"Available rules (showing {len(rules)}):", ""]
+
+            for rule in rules:
+                context_parts.append(f"- {rule.rule_id}:")
+                if rule.title:
+                    context_parts.append(f"  Title: {rule.title}")
+                if rule.description:
+                    desc = (
+                        rule.description[:200] + "..."
+                        if len(rule.description) > 200
+                        else rule.description
+                    )
+                    context_parts.append(f"  Description: {desc}")
+                context_parts.append("")
 
         return "\n".join(context_parts)
+
+    def _build_cross_reference_context(self, requirement_text: str, max_similar: int = 10) -> str:
+        """Build cross-framework evidence section from similar requirements.
+
+        Args:
+            requirement_text: The requirement text to find similarities for
+            max_similar: Maximum number of similar requirements to include
+
+        Returns:
+            Formatted cross-reference context string, or empty string if none found
+        """
+        try:
+            from content_agent.core.discovery.controls import ControlDiscovery
+
+            discovery = ControlDiscovery()
+            similar = discovery.find_similar_requirements(
+                requirement_text=requirement_text,
+                max_results=max_similar,
+                min_similarity=0.15,
+            )
+
+            if not similar:
+                return ""
+
+            parts = [
+                "Cross-framework evidence — rules mapped to similar requirements in other "
+                "control frameworks:",
+                "",
+            ]
+
+            for req in similar:
+                if not req.rules:
+                    continue
+                parts.append(
+                    f"- [{req.control_id}] {req.requirement_id}: {req.title} "
+                    f"(similarity: {req.similarity_score:.2f})"
+                )
+                parts.append(f"  Mapped rules: {', '.join(req.rules)}")
+                parts.append("")
+
+            if len(parts) <= 2:
+                return ""
+
+            return "\n".join(parts)
+        except Exception:
+            return ""
 
     def _build_mapping_prompt(self, requirement: ControlRequirement, rules_context: str) -> str:
         """Build prompt for rule mapping.
