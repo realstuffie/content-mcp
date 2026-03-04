@@ -51,6 +51,7 @@ class ControlGenerator:
         description: str | None = None,
         version: str | None = None,
         levels: list[str] | None = None,
+        product: str | None = None,
     ) -> ControlGenerationResult:
         """Generate control file structure with individual requirement files.
 
@@ -69,16 +70,21 @@ class ControlGenerator:
             description: Optional policy description
             version: Optional version string (e.g., 'v3r1')
             levels: Optional list of compliance levels (e.g., ['high', 'medium', 'low'])
+            product: Optional product ID; when set, defaults output to
+                     products/<product>/controls/ instead of controls/
 
         Returns:
             ControlGenerationResult with file paths and status
         """
-        logger.info(f"Generating control structure for {policy_id}")
+        logger.info(f"Generating control structure for {policy_id} (product={product})")
 
         try:
             # Determine output directory
             if output_dir is None:
-                output_dir = self.content_repo.path / "controls"
+                if product is not None:
+                    output_dir = self.content_repo.path / "products" / product / "controls"
+                else:
+                    output_dir = self.content_repo.path / "controls"
             else:
                 output_dir = Path(output_dir)
 

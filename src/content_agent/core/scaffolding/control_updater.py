@@ -31,11 +31,19 @@ class ControlUpdater:
         requirement_id: str,
         rules: list[str],
         status: str = "automated",
+        product: str | None = None,
     ) -> ControlUpdateResult:
         """Update rules and status for a specific requirement.
 
         Handles both inline and directory-based control files.
         Uses text-based editing to preserve Jinja2, comments, and formatting.
+
+        Args:
+            control_id: Control framework identifier
+            requirement_id: Requirement identifier
+            rules: List of rule IDs to set
+            status: Status to set (default: "automated")
+            product: Optional product ID to scope to product-specific controls
         """
         if status not in VALID_STATUSES:
             return ControlUpdateResult(
@@ -50,17 +58,25 @@ class ControlUpdater:
                 ],
             )
 
-        controls_dir = self.content_repo.path / "controls"
-        control_file = controls_dir / f"{control_id}.yml"
+        # Resolve control file path
+        if product is not None:
+            from content_agent.core.discovery.controls import ControlDiscovery
 
-        if not control_file.exists():
+            discovery = ControlDiscovery()
+            control_file = discovery._resolve_control_file(control_id, product)
+        else:
+            controls_dir = self.content_repo.path / "controls"
+            candidate = controls_dir / f"{control_id}.yml"
+            control_file = candidate if candidate.exists() else None
+
+        if control_file is None:
             return ControlUpdateResult(
-                file_path=control_file,
+                file_path=Path("."),
                 requirements_added=0,
                 requirements_updated=0,
                 requirements_unchanged=0,
                 success=False,
-                errors=[f"Control file not found: {control_file}"],
+                errors=[f"Control file not found: {control_id}"],
             )
 
         # Determine format by checking for controls_dir field
@@ -69,7 +85,7 @@ class ControlUpdater:
 
         if data.get("controls_dir"):
             return self._update_directory_format(
-                controls_dir, data["controls_dir"], requirement_id, rules, status
+                control_file.parent, data["controls_dir"], requirement_id, rules, status
             )
         else:
             return self._update_inline_format(control_file, requirement_id, rules, status)

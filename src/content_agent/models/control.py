@@ -136,6 +136,10 @@ class ControlFile(BaseModel):
         default_factory=dict,
         description="Additional metadata",
     )
+    source_dir: Path | None = Field(
+        default=None,
+        description="Directory from which this control file was loaded",
+    )
 
 
 class DocumentSection(BaseModel):

@@ -101,7 +101,7 @@ class TestGetControlRuleIndex:
             with patch.object(
                 discovery,
                 "get_control_details",
-                side_effect=lambda cid: {"anssi": cf1, "cis": cf2}.get(cid),
+                side_effect=lambda cid, **kw: {"anssi": cf1, "cis": cf2}.get(cid),
             ):
                 index = discovery.get_control_rule_index()
 
@@ -139,7 +139,7 @@ class TestGetControlRuleIndex:
         with patch.object(
             discovery,
             "get_control_details",
-            side_effect=lambda cid: cf1 if cid == "anssi" else None,
+            side_effect=lambda cid, **kw: cf1 if cid == "anssi" else None,
         ):
             index = discovery.get_control_rule_index(control_ids=["anssi"])
 
@@ -176,7 +176,7 @@ class TestGetControlRuleIndex:
             with patch.object(
                 discovery,
                 "get_control_details",
-                side_effect=lambda cid: {"anssi": cf1, "cis": cf2}.get(cid),
+                side_effect=lambda cid, **kw: {"anssi": cf1, "cis": cf2}.get(cid),
             ):
                 index = discovery.get_control_rule_index()
 

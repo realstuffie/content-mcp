@@ -278,16 +278,16 @@ For full parameter details and response schemas, see the [API Reference](docs/ap
 - `suggest_rule_mappings` - Get AI-suggested rule mappings (requires API key)
 - `validate_control_file` - Validate control file syntax and structure
 - `review_control_generation` - Review generated controls with validation and suggestions
-- `list_controls` - List available control frameworks
-- `get_control_details` - Get control framework details
-- `get_control_stats` - Get aggregate requirement statistics for a control file
-- `search_control_requirements` - Search within control requirements
-- `get_control_rule_index` - Build a complete index of requirements and rule mappings across frameworks
-- `find_similar_requirements` - Find requirements with similar text across control frameworks
+- `list_controls` - List available control frameworks (optional `product` to scope)
+- `get_control_details` - Get control framework details (optional `product` to scope)
+- `get_control_stats` - Get aggregate requirement statistics for a control file (optional `product` to scope)
+- `search_control_requirements` - Search within control requirements (optional `product` to scope)
+- `get_control_rule_index` - Build a complete index of requirements and rule mappings across frameworks (optional `product` to scope)
+- `find_similar_requirements` - Find requirements with similar text across control frameworks (optional `product` to scope)
 - `get_rule_product_availability` - Check which products include a given rule
-- `get_requirement_file_path` - Resolve the filesystem path for a specific requirement
-- `list_unmapped_requirements` - List requirements that need rule mappings
-- `update_requirement_rules` - Update rules and status for a requirement in a control file
+- `get_requirement_file_path` - Resolve the filesystem path for a specific requirement (optional `product` to scope)
+- `list_unmapped_requirements` - List requirements that need rule mappings (optional `product` to scope)
+- `update_requirement_rules` - Update rules and status for a requirement in a control file (optional `product` to scope)
 
 ### Build
 

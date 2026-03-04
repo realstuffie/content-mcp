@@ -26,51 +26,138 @@ class ControlDiscovery:
         """Initialize control discovery."""
         self.content_repo = get_content_repository()
 
-    def list_controls(self) -> list[str]:
+    def _get_controls_dirs(self, product: str | None = None) -> list[Path]:
+        """Return ordered list of control directories to scan.
+
+        Global controls directory is always first. Product-specific directories
+        come after, so they can override global controls with the same policy ID.
+
+        Args:
+            product: Optional product ID to scope to. If None, all product
+                     control directories are included.
+
+        Returns:
+            Ordered list of control directory paths (existing only).
+
+        Raises:
+            ValueError: If product is specified but not a known product.
+        """
+        dirs: list[Path] = []
+
+        global_dir = self.content_repo.path / "controls"
+        if global_dir.exists():
+            dirs.append(global_dir)
+
+        if product is not None:
+            # Validate product exists via ProductDiscovery
+            from content_agent.core.discovery.products import ProductDiscovery
+
+            product_discovery = ProductDiscovery()
+            known_products = [p.product_id for p in product_discovery.list_products()]
+            if product not in known_products:
+                raise ValueError(
+                    f"Unknown product '{product}'. "
+                    f"Known products: {', '.join(sorted(known_products))}"
+                )
+            product_controls = self.content_repo.path / "products" / product / "controls"
+            if product_controls.exists():
+                dirs.append(product_controls)
+        else:
+            # Discover all product control directories
+            from content_agent.core.discovery.products import ProductDiscovery
+
+            product_discovery = ProductDiscovery()
+            known_products = [p.product_id for p in product_discovery.list_products()]
+            for pid in sorted(known_products):
+                product_controls = self.content_repo.path / "products" / pid / "controls"
+                if product_controls.exists():
+                    dirs.append(product_controls)
+
+        return dirs
+
+    def list_controls(self, product: str | None = None) -> list[str]:
         """List available control frameworks.
+
+        Args:
+            product: Optional product ID to scope discovery
 
         Returns:
             List of control framework names
         """
-        logger.debug("Listing control frameworks")
-        controls = []
+        logger.debug(f"Listing control frameworks (product={product})")
 
-        controls_dir = self.content_repo.path / "controls"
-        if not controls_dir.exists():
-            return []
+        # Build map of policy_id -> file_path; later dirs override earlier
+        controls_map: dict[str, Path] = {}
 
-        for control_file in controls_dir.glob("*.yml"):
-            controls.append(control_file.stem)
+        for controls_dir in self._get_controls_dirs(product):
+            for control_file in controls_dir.glob("*.yml"):
+                policy_id = control_file.stem
+                if policy_id in controls_map:
+                    logger.warning(
+                        f"Control '{policy_id}' in {control_file} overrides "
+                        f"previously found {controls_map[policy_id]}"
+                    )
+                controls_map[policy_id] = control_file
 
-        controls.sort()
+        controls = sorted(controls_map.keys())
         logger.info(f"Found {len(controls)} control frameworks")
         return controls
 
-    def get_control_details(self, control_id: str) -> ControlFile | None:
+    def _resolve_control_file(self, control_id: str, product: str | None = None) -> Path | None:
+        """Resolve the file path for a control ID using override semantics.
+
+        Later directories override earlier ones.
+
+        Args:
+            control_id: Control framework identifier
+            product: Optional product ID to scope resolution
+
+        Returns:
+            Path to the control file, or None if not found
+        """
+        resolved: Path | None = None
+
+        for controls_dir in self._get_controls_dirs(product):
+            candidate = controls_dir / f"{control_id}.yml"
+            if candidate.exists():
+                if resolved is not None:
+                    logger.warning(
+                        f"Control '{control_id}' in {candidate} overrides "
+                        f"previously found {resolved}"
+                    )
+                resolved = candidate
+
+        return resolved
+
+    def get_control_details(
+        self, control_id: str, product: str | None = None
+    ) -> ControlFile | None:
         """Parse and return complete control file details.
 
         Args:
             control_id: Control framework identifier
+            product: Optional product ID to scope discovery
 
         Returns:
             ControlFile with parsed details, or None if not found
         """
-        logger.debug(f"Getting details for control: {control_id}")
+        logger.debug(f"Getting details for control: {control_id} (product={product})")
 
-        controls_dir = self.content_repo.path / "controls"
-        control_file = controls_dir / f"{control_id}.yml"
-
-        if not control_file.exists():
-            logger.warning(f"Control file not found: {control_file}")
+        control_file = self._resolve_control_file(control_id, product)
+        if control_file is None:
+            logger.warning(f"Control file not found: {control_id}")
             return None
 
-        return self.parse_control_file(control_file)
+        return self.parse_control_file(control_file, source_dir=control_file.parent)
 
-    def parse_control_file(self, file_path: Path) -> ControlFile | None:
+    def parse_control_file(
+        self, file_path: Path, source_dir: Path | None = None
+    ) -> ControlFile | None:
         """Parse control YAML into structured model.
 
         Args:
             file_path: Path to control file
+            source_dir: Directory from which this file was loaded
 
         Returns:
             ControlFile object, or None if parsing fails
@@ -112,6 +199,10 @@ class ControlDiscovery:
                     data["controls"] = []
                 data["controls"].extend(controls)
 
+            # Set source_dir
+            if source_dir is not None:
+                data["source_dir"] = source_dir
+
             # Parse control file
             return ControlFile(**data)
 
@@ -123,28 +214,35 @@ class ControlDiscovery:
         self,
         query: str,
         control_id: str | None = None,
+        product: str | None = None,
     ) -> list[ControlRequirement]:
         """Search within control files for requirements.
 
         Args:
             query: Search query (matches title, description)
             control_id: Optional control framework to search within
+            product: Optional product ID to scope discovery
 
         Returns:
             List of matching control requirements
         """
-        logger.debug(f"Searching controls: query='{query}', control_id={control_id}")
+        logger.debug(
+            f"Searching controls: query='{query}', control_id={control_id}, product={product}"
+        )
 
         results = []
 
         # Determine which controls to search
         if control_id:
-            control = self.get_control_details(control_id)
+            control = self.get_control_details(control_id, product=product)
             controls_to_search = [control] if control else []
         else:
-            control_ids = self.list_controls()
-            controls_to_search = [self.get_control_details(cid) for cid in control_ids]
-            controls_to_search = [c for c in controls_to_search if c is not None]
+            control_ids = self.list_controls(product=product)
+            controls_to_search = [
+                c
+                for cid in control_ids
+                if (c := self.get_control_details(cid, product=product)) is not None
+            ]
 
         # Search through controls
         query_lower = query.lower()
@@ -180,32 +278,34 @@ class ControlDiscovery:
         self,
         include_unmapped: bool = True,
         control_ids: list[str] | None = None,
+        product: str | None = None,
     ) -> ControlRuleIndex:
         """Build complete index of all requirements with rule mappings.
 
         Args:
             include_unmapped: Whether to include requirements without rule mappings
             control_ids: Optional list of control framework IDs to index
+            product: Optional product ID to scope discovery
 
         Returns:
             ControlRuleIndex with all indexed requirements
         """
         logger.debug(
             f"Building control rule index: include_unmapped={include_unmapped}, "
-            f"control_ids={control_ids}"
+            f"control_ids={control_ids}, product={product}"
         )
 
         if control_ids is not None:
             ids_to_process = control_ids
         else:
-            ids_to_process = self.list_controls()
+            ids_to_process = self.list_controls(product=product)
 
         all_requirements: list[IndexedRequirement] = []
         all_rule_ids: set[str] = set()
         controls_indexed = 0
 
         for control_id in ids_to_process:
-            control_file = self.get_control_details(control_id)
+            control_file = self.get_control_details(control_id, product=product)
             if control_file is None:
                 continue
 
@@ -244,18 +344,19 @@ class ControlDiscovery:
         )
         return index
 
-    def get_control_stats(self, control_id: str) -> ControlStats | None:
+    def get_control_stats(self, control_id: str, product: str | None = None) -> ControlStats | None:
         """Compute aggregate requirement statistics for a control file.
 
         Args:
             control_id: Control framework identifier
+            product: Optional product ID to scope discovery
 
         Returns:
             ControlStats with counts, or None if control not found
         """
-        logger.debug(f"Computing stats for control: {control_id}")
+        logger.debug(f"Computing stats for control: {control_id} (product={product})")
 
-        control = self.get_control_details(control_id)
+        control = self.get_control_details(control_id, product=product)
         if control is None:
             return None
 
@@ -402,6 +503,7 @@ class ControlDiscovery:
         min_similarity: float = 0.2,
         max_results: int = 20,
         exclude_control_id: str | None = None,
+        product: str | None = None,
     ) -> list[SimilarRequirement]:
         """Find requirements with similar text across all control files.
 
@@ -410,20 +512,21 @@ class ControlDiscovery:
             min_similarity: Minimum Jaccard similarity threshold
             max_results: Maximum number of results to return
             exclude_control_id: Optional control framework to exclude
+            product: Optional product ID to scope discovery
 
         Returns:
             List of SimilarRequirement objects sorted by similarity descending
         """
         logger.debug(
             f"Finding similar requirements: min_similarity={min_similarity}, "
-            f"max_results={max_results}, exclude={exclude_control_id}"
+            f"max_results={max_results}, exclude={exclude_control_id}, product={product}"
         )
 
         query_tokens = self._tokenize(requirement_text)
         if not query_tokens:
             return []
 
-        index = self.get_control_rule_index(include_unmapped=True)
+        index = self.get_control_rule_index(include_unmapped=True, product=product)
         results: list[SimilarRequirement] = []
 
         for req in index.requirements:
@@ -452,7 +555,10 @@ class ControlDiscovery:
         return results[:max_results]
 
     def get_requirement_file_path(
-        self, control_id: str, requirement_id: str
+        self,
+        control_id: str,
+        requirement_id: str,
+        product: str | None = None,
     ) -> RequirementFilePath | None:
         """Resolve the filesystem path for a specific requirement.
 
@@ -461,25 +567,24 @@ class ControlDiscovery:
         Args:
             control_id: Control framework identifier
             requirement_id: Requirement identifier
+            product: Optional product ID to scope discovery
 
         Returns:
             RequirementFilePath with resolved path, or None if not found
         """
-        logger.debug(f"Resolving path for {control_id}/{requirement_id}")
+        logger.debug(f"Resolving path for {control_id}/{requirement_id} (product={product})")
 
-        controls_dir = self.content_repo.path / "controls"
-        control_file = controls_dir / f"{control_id}.yml"
-
-        if not control_file.exists():
-            logger.warning(f"Control file not found: {control_file}")
+        control_file_path = self._resolve_control_file(control_id, product)
+        if control_file_path is None:
+            logger.warning(f"Control file not found: {control_id}")
             return None
 
-        with open(control_file) as f:
+        with open(control_file_path) as f:
             data = yaml.safe_load(f)
 
         # Directory-based format: controls_dir field points to subdirectory
         if data.get("controls_dir"):
-            req_file = controls_dir / data["controls_dir"] / f"{requirement_id}.yml"
+            req_file = control_file_path.parent / data["controls_dir"] / f"{requirement_id}.yml"
             return RequirementFilePath(
                 control_id=control_id,
                 requirement_id=requirement_id,
@@ -494,7 +599,7 @@ class ControlDiscovery:
                 return RequirementFilePath(
                     control_id=control_id,
                     requirement_id=requirement_id,
-                    file_path=control_file.resolve(),
+                    file_path=control_file_path.resolve(),
                     format="inline",
                     exists=True,
                 )
@@ -506,19 +611,21 @@ class ControlDiscovery:
         self,
         control_id: str,
         status_filter: list[str] | None = None,
+        product: str | None = None,
     ) -> list[IndexedRequirement] | None:
         """List requirements that need rule mappings.
 
         Args:
             control_id: Control framework identifier
             status_filter: Status values to include (default: ["pending"])
+            product: Optional product ID to scope discovery
 
         Returns:
             List of unmapped IndexedRequirement objects, or None if control not found
         """
-        logger.debug(f"Listing unmapped requirements for control: {control_id}")
+        logger.debug(f"Listing unmapped requirements for control: {control_id} (product={product})")
 
-        control = self.get_control_details(control_id)
+        control = self.get_control_details(control_id, product=product)
         if control is None:
             return None
 
@@ -566,85 +673,98 @@ class ControlDiscovery:
             return None
 
 
-def list_controls() -> list[str]:
+def list_controls(product: str | None = None) -> list[str]:
     """List available control frameworks.
+
+    Args:
+        product: Optional product ID to scope discovery
 
     Returns:
         List of control framework names
     """
     discovery = ControlDiscovery()
-    return discovery.list_controls()
+    return discovery.list_controls(product=product)
 
 
-def get_control_details(control_id: str) -> ControlFile | None:
+def get_control_details(control_id: str, product: str | None = None) -> ControlFile | None:
     """Get control framework details.
 
     Args:
         control_id: Control framework identifier
+        product: Optional product ID to scope discovery
 
     Returns:
         ControlFile with details, or None if not found
     """
     discovery = ControlDiscovery()
-    return discovery.get_control_details(control_id)
+    return discovery.get_control_details(control_id, product=product)
 
 
-def search_controls(query: str, control_id: str | None = None) -> list[ControlRequirement]:
+def search_controls(
+    query: str, control_id: str | None = None, product: str | None = None
+) -> list[ControlRequirement]:
     """Search control requirements.
 
     Args:
         query: Search query
         control_id: Optional control framework to search within
+        product: Optional product ID to scope discovery
 
     Returns:
         List of matching requirements
     """
     discovery = ControlDiscovery()
-    return discovery.search_controls(query, control_id)
+    return discovery.search_controls(query, control_id, product=product)
 
 
 def get_control_rule_index(
     include_unmapped: bool = True,
     control_ids: list[str] | None = None,
+    product: str | None = None,
 ) -> ControlRuleIndex:
     """Build complete index of all requirements with rule mappings.
 
     Args:
         include_unmapped: Whether to include requirements without rule mappings
         control_ids: Optional list of control framework IDs to index
+        product: Optional product ID to scope discovery
 
     Returns:
         ControlRuleIndex with all indexed requirements
     """
     discovery = ControlDiscovery()
-    return discovery.get_control_rule_index(include_unmapped, control_ids)
+    return discovery.get_control_rule_index(include_unmapped, control_ids, product=product)
 
 
-def get_control_stats(control_id: str) -> ControlStats | None:
+def get_control_stats(control_id: str, product: str | None = None) -> ControlStats | None:
     """Compute aggregate requirement statistics for a control file.
 
     Args:
         control_id: Control framework identifier
+        product: Optional product ID to scope discovery
 
     Returns:
         ControlStats with counts, or None if not found
     """
     discovery = ControlDiscovery()
-    return discovery.get_control_stats(control_id)
+    return discovery.get_control_stats(control_id, product=product)
 
 
-def get_requirement_file_path(control_id: str, requirement_id: str) -> RequirementFilePath | None:
+def get_requirement_file_path(
+    control_id: str, requirement_id: str, product: str | None = None
+) -> RequirementFilePath | None:
     """Resolve the filesystem path for a specific requirement.
 
     Args:
         control_id: Control framework identifier
         requirement_id: Requirement identifier
+        product: Optional product ID to scope discovery
 
     Returns:
         RequirementFilePath with resolved path, or None if not found
     """
     discovery = ControlDiscovery()
-    return discovery.get_requirement_file_path(control_id, requirement_id)
+    return discovery.get_requirement_file_path(control_id, requirement_id, product=product)
 
 
 def find_similar_requirements(
@@ -652,6 +772,7 @@ def find_similar_requirements(
     min_similarity: float = 0.2,
     max_results: int = 20,
     exclude_control_id: str | None = None,
+    product: str | None = None,
 ) -> list[SimilarRequirement]:
     """Find requirements with similar text across all control files.
 
@@ -660,28 +781,31 @@ def find_similar_requirements(
         min_similarity: Minimum Jaccard similarity threshold
         max_results: Maximum number of results to return
         exclude_control_id: Optional control framework to exclude
+        product: Optional product ID to scope discovery
 
     Returns:
         List of SimilarRequirement objects sorted by similarity descending
     """
     discovery = ControlDiscovery()
     return discovery.find_similar_requirements(
-        requirement_text, min_similarity, max_results, exclude_control_id
+        requirement_text, min_similarity, max_results, exclude_control_id, product=product
     )
 
 
 def list_unmapped_requirements(
     control_id: str,
     status_filter: list[str] | None = None,
+    product: str | None = None,
 ) -> list[IndexedRequirement] | None:
     """List requirements that need rule mappings.
 
     Args:
         control_id: Control framework identifier
         status_filter: Status values to include (default: ["pending"])
+        product: Optional product ID to scope discovery
 
     Returns:
         List of unmapped IndexedRequirement objects, or None if control not found
     """
     discovery = ControlDiscovery()
-    return discovery.list_unmapped_requirements(control_id, status_filter)
+    return discovery.list_unmapped_requirements(control_id, status_filter, product=product)

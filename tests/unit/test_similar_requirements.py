@@ -176,7 +176,7 @@ class TestFindSimilarRequirements:
             with patch.object(
                 discovery,
                 "get_control_details",
-                side_effect=lambda cid: {"cis": cf1, "nist": cf2}.get(cid),
+                side_effect=lambda cid, **kw: {"cis": cf1, "nist": cf2}.get(cid),
             ):
                 results = discovery.find_similar_requirements(
                     "password policy rules",

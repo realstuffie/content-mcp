@@ -358,6 +358,10 @@ TOOLS = [
                     "description": "Deprecated - always uses flat structure as required by ComplianceAsCode",
                     "default": False,
                 },
+                "product": {
+                    "type": "string",
+                    "description": "Optional product ID; generates into products/<product>/controls/ instead of controls/",
+                },
             },
             "required": ["policy_id", "policy_title", "requirements_json"],
         },
@@ -437,7 +441,12 @@ TOOLS = [
         "description": "List available control frameworks",
         "inputSchema": {
             "type": "object",
-            "properties": {},
+            "properties": {
+                "product": {
+                    "type": "string",
+                    "description": "Optional product ID to scope to product-specific controls (e.g., 'rhel9')",
+                },
+            },
             "required": [],
         },
     },
@@ -450,6 +459,10 @@ TOOLS = [
                 "control_id": {
                     "type": "string",
                     "description": "Control framework identifier",
+                },
+                "product": {
+                    "type": "string",
+                    "description": "Optional product ID to scope to product-specific controls (e.g., 'rhel9')",
                 },
             },
             "required": ["control_id"],
@@ -464,6 +477,10 @@ TOOLS = [
                 "control_id": {
                     "type": "string",
                     "description": "Control framework identifier",
+                },
+                "product": {
+                    "type": "string",
+                    "description": "Optional product ID to scope to product-specific controls (e.g., 'rhel9')",
                 },
             },
             "required": ["control_id"],
@@ -484,6 +501,10 @@ TOOLS = [
                     "type": "array",
                     "items": {"type": "string"},
                     "description": "Optional list of control framework IDs to index (default: all)",
+                },
+                "product": {
+                    "type": "string",
+                    "description": "Optional product ID to scope to product-specific controls (e.g., 'rhel9')",
                 },
             },
             "required": [],
@@ -512,6 +533,10 @@ TOOLS = [
                 "exclude_control_id": {
                     "type": "string",
                     "description": "Optional control framework to exclude from results",
+                },
+                "product": {
+                    "type": "string",
+                    "description": "Optional product ID to scope to product-specific controls (e.g., 'rhel9')",
                 },
             },
             "required": ["requirement_text"],
@@ -545,6 +570,10 @@ TOOLS = [
                     "type": "string",
                     "description": "Optional control framework to search within",
                 },
+                "product": {
+                    "type": "string",
+                    "description": "Optional product ID to scope to product-specific controls (e.g., 'rhel9')",
+                },
             },
             "required": ["query"],
         },
@@ -562,6 +591,10 @@ TOOLS = [
                 "requirement_id": {
                     "type": "string",
                     "description": "Requirement identifier (e.g., 'R1', 'SRG-OS-000001-GPOS-00001')",
+                },
+                "product": {
+                    "type": "string",
+                    "description": "Optional product ID to scope to product-specific controls (e.g., 'rhel9')",
                 },
             },
             "required": ["control_id", "requirement_id"],
@@ -581,6 +614,10 @@ TOOLS = [
                     "type": "array",
                     "items": {"type": "string"},
                     "description": "Status values to include (default: ['pending']). Common values: pending, manual, partial, does not meet",
+                },
+                "product": {
+                    "type": "string",
+                    "description": "Optional product ID to scope to product-specific controls (e.g., 'rhel9')",
                 },
             },
             "required": ["control_id"],
@@ -616,6 +653,10 @@ TOOLS = [
                         "pending",
                     ],
                     "description": "Status to set (default: 'automated')",
+                },
+                "product": {
+                    "type": "string",
+                    "description": "Optional product ID to scope to product-specific controls (e.g., 'rhel9')",
                 },
             },
             "required": ["control_id", "requirement_id", "rules"],
@@ -897,6 +938,7 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
                 requirements.append(req)
 
             # Generate control files
+            product = arguments.get("product")
             generator = ControlGenerator()
             result = generator.generate_control_structure(
                 policy_id=policy_id,
@@ -906,6 +948,7 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
                 source_document=source_document,
                 version=version,
                 levels=levels,
+                product=product,
             )
 
             summary = f"Generated control structure for {policy_id}\n"
@@ -1024,7 +1067,10 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
             return [{"type": "text", "text": formatted}]
 
         elif name == "list_controls":
-            controls = discovery.list_controls()
+            from content_agent.core.discovery.controls import list_controls
+
+            product = arguments.get("product")
+            controls = list_controls(product=product)
             summary = f"Found {len(controls)} control frameworks\n\n"
             result = {"controls": controls, "count": len(controls)}
             return [{"type": "text", "text": summary + json.dumps(result, indent=2)}]
@@ -1033,7 +1079,8 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
             from content_agent.core.discovery.controls import get_control_details
 
             control_id = arguments["control_id"]
-            control = get_control_details(control_id)
+            product = arguments.get("product")
+            control = get_control_details(control_id, product=product)
 
             if not control:
                 return [{"type": "text", "text": f"Control not found: {control_id}"}]
@@ -1052,7 +1099,8 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
             from content_agent.core.discovery.controls import get_control_stats
 
             control_id = arguments["control_id"]
-            stats = get_control_stats(control_id)
+            product = arguments.get("product")
+            stats = get_control_stats(control_id, product=product)
 
             if not stats:
                 return [{"type": "text", "text": f"Control not found: {control_id}"}]
@@ -1075,8 +1123,9 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
 
             query = arguments["query"]
             control_id = arguments.get("control_id")
+            product = arguments.get("product")
 
-            requirements = search_controls(query=query, control_id=control_id)
+            requirements = search_controls(query=query, control_id=control_id, product=product)
             result = [r.model_dump(mode="json") for r in requirements]
             summary = f"Found {len(requirements)} matching requirements\n\n"
 
@@ -1089,9 +1138,10 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
 
             include_unmapped = arguments.get("include_unmapped", True)
             control_ids = arguments.get("control_ids")
+            product = arguments.get("product")
 
             index = get_control_rule_index(
-                include_unmapped=include_unmapped, control_ids=control_ids
+                include_unmapped=include_unmapped, control_ids=control_ids, product=product
             )
             summary = (
                 f"Control rule index: {index.total_controls} controls, "
@@ -1114,12 +1164,14 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
             min_similarity = arguments.get("min_similarity", 0.2)
             max_results = arguments.get("max_results", 20)
             exclude_control_id = arguments.get("exclude_control_id")
+            product = arguments.get("product")
 
             results = find_similar_requirements(
                 requirement_text=requirement_text,
                 min_similarity=min_similarity,
                 max_results=max_results,
                 exclude_control_id=exclude_control_id,
+                product=product,
             )
             result = [r.model_dump(mode="json") for r in results]
             summary = f"Found {len(results)} similar requirements\n\n"
@@ -1152,7 +1204,8 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
 
             control_id = arguments["control_id"]
             requirement_id = arguments["requirement_id"]
-            result = get_requirement_file_path(control_id, requirement_id)
+            product = arguments.get("product")
+            result = get_requirement_file_path(control_id, requirement_id, product=product)
 
             if not result:
                 return [
@@ -1179,8 +1232,9 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
 
             control_id = arguments["control_id"]
             status_filter = arguments.get("status_filter")
+            product = arguments.get("product")
 
-            requirements = list_unmapped_requirements(control_id, status_filter)
+            requirements = list_unmapped_requirements(control_id, status_filter, product=product)
 
             if requirements is None:
                 return [{"type": "text", "text": f"Control not found: {control_id}"}]
@@ -1196,6 +1250,7 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
             requirement_id = arguments["requirement_id"]
             rules = arguments["rules"]
             status = arguments.get("status", "automated")
+            product = arguments.get("product")
 
             updater = ControlUpdater()
             result = updater.update_requirement_rules(
@@ -1203,6 +1258,7 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
                 requirement_id=requirement_id,
                 rules=rules,
                 status=status,
+                product=product,
             )
 
             if not result.success:

@@ -378,6 +378,7 @@ Generate control file structure from extracted requirements. Creates individual 
 - `version` (string, optional): Version string (e.g., "v3r1", "1.0")
 - `levels` (array of strings, optional): Compliance levels (e.g., ["high", "medium", "low"])
 - `nested_by_section` (boolean, optional): Deprecated — always uses flat structure as required by ComplianceAsCode. Default: false.
+- `product` (string, optional): Product ID; generates into `products/<product>/controls/` instead of `controls/`
 
 **Returns:** ControlGenerationResult object
 
@@ -445,7 +446,8 @@ Review generated control files with validation, text comparison, and AI suggesti
 
 List available control frameworks.
 
-**Parameters:** None
+**Parameters:**
+- `product` (string, optional): Product ID to scope to product-specific controls (e.g., "rhel9"). When set, scans both global `controls/` and `products/<product>/controls/` with override semantics.
 
 **Returns:** Object with `controls` (array of control framework ID strings) and `count` (integer)
 
@@ -455,6 +457,7 @@ Get detailed information about a control framework.
 
 **Parameters:**
 - `control_id` (string, required): Control framework identifier
+- `product` (string, optional): Product ID to scope to product-specific controls
 
 **Returns:** ControlFile object with full requirements list
 
@@ -464,6 +467,7 @@ Get aggregate requirement statistics for a control file. Returns pre-computed co
 
 **Parameters:**
 - `control_id` (string, required): Control framework identifier
+- `product` (string, optional): Product ID to scope to product-specific controls
 
 **Returns:** ControlStats object with total, by_status, mapped, and unmapped counts
 
@@ -474,6 +478,7 @@ Search within control files for specific requirements.
 **Parameters:**
 - `query` (string, required): Search query (matches title, description, ID)
 - `control_id` (string, optional): Control framework to search within
+- `product` (string, optional): Product ID to scope to product-specific controls
 
 **Returns:** Array of ControlRequirement objects
 
@@ -484,6 +489,7 @@ Build a complete index of all requirements and rule mappings across all control 
 **Parameters:**
 - `include_unmapped` (boolean, optional): Include requirements without rule mappings (default: true)
 - `control_ids` (array of strings, optional): List of control framework IDs to index (default: all)
+- `product` (string, optional): Product ID to scope to product-specific controls
 
 **Returns:** ControlRuleIndex object
 
@@ -496,6 +502,7 @@ Find requirements with similar text across all control frameworks using text sim
 - `min_similarity` (number, optional): Minimum similarity score 0.0–1.0 (default: 0.2)
 - `max_results` (integer, optional): Maximum number of results (default: 20)
 - `exclude_control_id` (string, optional): Control framework to exclude from results
+- `product` (string, optional): Product ID to scope to product-specific controls
 
 **Returns:** Array of SimilarRequirement objects
 
@@ -515,6 +522,7 @@ Resolve the filesystem path for a specific requirement in a control file. Handle
 **Parameters:**
 - `control_id` (string, required): Control framework identifier (e.g., "anssi", "srg_gpos")
 - `requirement_id` (string, required): Requirement identifier (e.g., "R1", "SRG-OS-000001-GPOS-00001")
+- `product` (string, optional): Product ID to scope to product-specific controls
 
 **Returns:** RequirementFilePath object
 
@@ -538,6 +546,7 @@ Update the rules list and status for a specific requirement in a control file. H
 - `requirement_id` (string, required): Requirement identifier (e.g., "R1", "SRG-OS-000001-GPOS-00001")
 - `rules` (array of strings, required): Rule IDs to set for this requirement (replaces existing rules)
 - `status` (string, optional): Status to set (default: "automated"). Enum: `automated`, `partially_automated`, `manual`, `not_applicable`, `pending`
+- `product` (string, optional): Product ID to scope to product-specific controls
 
 **Returns:** ControlUpdateResult object
 
@@ -560,6 +569,7 @@ List requirements in a control file that need rule mappings. Returns requirement
 **Parameters:**
 - `control_id` (string, required): Control framework identifier (e.g., "anssi", "srg_gpos")
 - `status_filter` (array of strings, optional): Status values to include (default: `["pending"]`). Common values: pending, manual, partial, does not meet
+- `product` (string, optional): Product ID to scope to product-specific controls
 
 **Returns:** Array of IndexedRequirement objects (includes requirements matching status filter OR with empty rules lists)
 
