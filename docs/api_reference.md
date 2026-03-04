@@ -363,8 +363,9 @@ Parse security policy document (PDF, Markdown, HTML, or text) and extract requir
 **Parameters:**
 - `source` (string, required): Path to file or URL of policy document
 - `document_type` (string, required): Document type. Enum: `pdf`, `markdown`, `text`, `html`.
+- `requirement_id` (string, optional): Extract only the section matching this requirement ID (e.g., `R34`, `1.1.1.1`, `RHEL-09-171011`). Uses word-boundary matching to avoid partial matches. When omitted, returns the full document.
 
-**Returns:** ParsedDocument object with sections hierarchy and extracted requirements
+**Returns:** ParsedDocument object with sections hierarchy and extracted requirements. When `requirement_id` is provided, sections are filtered to the matching section only. If no match is found, sections is empty and `metadata.requirement_not_found` contains the searched ID.
 
 #### generate_control_files
 

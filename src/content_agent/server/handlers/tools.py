@@ -2,9 +2,11 @@
 
 import json
 import logging
+import re
 from typing import Any
 
 from content_agent.core import discovery, scaffolding
+from content_agent.models.control import DocumentSection
 
 logger = logging.getLogger(__name__)
 
@@ -318,6 +320,10 @@ TOOLS = [
                     "description": "Document type",
                     "enum": ["pdf", "markdown", "text", "html"],
                 },
+                "requirement_id": {
+                    "type": "string",
+                    "description": "Optional: extract only the section matching this requirement ID (e.g., 'R34', '1.1.1.1', 'RHEL-09-171011'). Returns the same JSON structure with sections filtered to the match.",
+                },
             },
             "required": ["source", "document_type"],
         },
@@ -628,6 +634,36 @@ TOOLS = [
 ]
 
 
+def _find_section_by_requirement_id(
+    sections: list[DocumentSection], requirement_id: str
+) -> DocumentSection | None:
+    """Find a section whose title contains the requirement ID.
+
+    Uses word-boundary matching to avoid partial matches
+    (e.g., 'R3' should not match 'R30').
+    """
+    escaped = re.escape(requirement_id)
+    pattern = re.compile(r"(?<![.\w])" + escaped + r"(?![.\w])", re.IGNORECASE)
+
+    # Search titles first (most policy documents use the ID in headings)
+    for section in sections:
+        if pattern.search(section.title):
+            return section
+        found = _find_section_by_requirement_id(section.subsections, requirement_id)
+        if found:
+            return found
+
+    # Fallback: search section content (STIG has IDs in body, not headings)
+    for section in sections:
+        if pattern.search(section.content):
+            return section
+        for sub in section.subsections:
+            if pattern.search(sub.content):
+                return sub
+
+    return None
+
+
 async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
     """Handle tool call.
 
@@ -834,6 +870,17 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
 
             # Parse document
             parsed = parser.parse(source)
+
+            # Filter sections by requirement ID if provided
+            requirement_id = arguments.get("requirement_id")
+            if requirement_id:
+                matching = _find_section_by_requirement_id(parsed.sections, requirement_id)
+                if matching:
+                    parsed.sections = [matching]
+                else:
+                    parsed.sections = []
+                    parsed.metadata["requirement_not_found"] = requirement_id
+
             result = parsed.model_dump(mode="json")
             summary = f"Parsed {doc_type} document: {parsed.title}\n"
             summary += f"Sections: {len(parsed.sections)}\n"

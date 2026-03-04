@@ -273,7 +273,7 @@ For full parameter details and response schemas, see the [API Reference](docs/ap
 
 ### Control Files
 
-- `parse_policy_document` - Parse security policy documents (PDF, Markdown, HTML, text)
+- `parse_policy_document` - Parse security policy documents (PDF, Markdown, HTML, text). Optional `requirement_id` parameter filters to a single requirement section.
 - `generate_control_files` - Generate control file structure from requirements
 - `validate_control_file` - Validate control file syntax and structure
 - `review_control_generation` - Review generated controls with validation and suggestions
