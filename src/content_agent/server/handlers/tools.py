@@ -634,6 +634,9 @@ TOOLS = [
 ]
 
 
+_REQ_ID_PATTERN = re.compile(r"(?:^|\s)(\d+(?:\.\d+){2,}|R\d+)\b")
+
+
 def _find_section_by_requirement_id(
     sections: list[DocumentSection], requirement_id: str
 ) -> DocumentSection | None:
@@ -641,14 +644,39 @@ def _find_section_by_requirement_id(
 
     Uses word-boundary matching to avoid partial matches
     (e.g., 'R3' should not match 'R30').
+
+    For flat-heading documents (e.g., CIS benchmarks where all headings are
+    level 1), collects following sibling sections that belong to the matched
+    requirement — stopping at the next requirement ID heading.
     """
     escaped = re.escape(requirement_id)
     pattern = re.compile(r"(?<![.\w])" + escaped + r"(?![.\w])", re.IGNORECASE)
 
     # Search titles first (most policy documents use the ID in headings)
-    for section in sections:
+    for i, section in enumerate(sections):
         if pattern.search(section.title):
+            # Collect following sibling sections that are body headings
+            # (not new requirement IDs) for flat-heading documents
+            extra_content_parts: list[str] = []
+            for sibling in sections[i + 1 :]:
+                if _REQ_ID_PATTERN.search(sibling.title):
+                    break  # hit next requirement
+                extra_content_parts.append(f"## {sibling.title}\n\n{sibling.content}")
+            if extra_content_parts:
+                combined = section.content
+                if combined:
+                    combined += "\n\n"
+                combined += "\n\n".join(extra_content_parts)
+                section = DocumentSection(
+                    id=section.id,
+                    title=section.title,
+                    level=section.level,
+                    content=combined,
+                    subsections=section.subsections,
+                    parent_id=section.parent_id,
+                )
             return section
+        # Also recurse into subsections
         found = _find_section_by_requirement_id(section.subsections, requirement_id)
         if found:
             return found
