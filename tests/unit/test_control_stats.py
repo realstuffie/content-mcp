@@ -182,24 +182,27 @@ class TestGetControlStats:
 
     @patch("content_agent.core.discovery.controls.get_content_repository")
     def test_all_model_statuses(self, mock_repo):
-        """Test counting across all statuses accepted by ControlRequirement model."""
+        """Test counting across all 10 canonical statuses from control.json schema."""
         from content_agent.core.discovery.controls import ControlDiscovery
 
         discovery = ControlDiscovery()
 
-        # These are the statuses currently accepted by ControlRequirement's Literal type.
-        # The upstream control.json schema defines 10 canonical statuses; the model
-        # constrains to this subset.
-        model_statuses = [
+        canonical_statuses = [
             "automated",
-            "partially_automated",
+            "documentation",
+            "does not meet",
+            "inherently met",
             "manual",
-            "not_applicable",
+            "not applicable",
+            "partial",
             "pending",
+            "planned",
+            "supported",
         ]
 
         reqs = [
-            _make_requirement(f"R{i}", status=status) for i, status in enumerate(model_statuses, 1)
+            _make_requirement(f"R{i}", status=status)
+            for i, status in enumerate(canonical_statuses, 1)
         ]
         cf = _make_control_file("test", controls=reqs)
 
@@ -207,9 +210,9 @@ class TestGetControlStats:
             stats = discovery.get_control_stats("test")
 
         assert stats is not None
-        assert stats.total == 5
-        assert len(stats.by_status) == 5
-        for status in model_statuses:
+        assert stats.total == 10
+        assert len(stats.by_status) == 10
+        for status in canonical_statuses:
             assert stats.by_status[status] == 1
 
     @patch("content_agent.core.discovery.controls.get_content_repository")
@@ -222,7 +225,7 @@ class TestGetControlStats:
             _make_requirement("R1", status="automated"),
             _make_requirement("R2", status="automated"),
             _make_requirement("R3", status="manual"),
-            _make_requirement("R4", status="not_applicable"),
+            _make_requirement("R4", status="not applicable"),
             _make_requirement("R5", status="automated"),
         ]
         cf = _make_control_file("test", controls=reqs)
@@ -231,6 +234,6 @@ class TestGetControlStats:
             stats = discovery.get_control_stats("test")
 
         assert stats is not None
-        assert stats.by_status == {"automated": 3, "manual": 1, "not_applicable": 1}
+        assert stats.by_status == {"automated": 3, "manual": 1, "not applicable": 1}
         assert stats.total == 5
         assert sum(stats.by_status.values()) == stats.total

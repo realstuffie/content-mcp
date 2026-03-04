@@ -32,10 +32,15 @@ class ControlRequirement(BaseModel):
     )
     status: Literal[
         "automated",
-        "partially_automated",
+        "documentation",
+        "does not meet",
+        "inherently met",
         "manual",
-        "not_applicable",
+        "not applicable",
+        "partial",
         "pending",
+        "planned",
+        "supported",
     ] = Field(
         default="pending",
         description="Implementation status of this control",
