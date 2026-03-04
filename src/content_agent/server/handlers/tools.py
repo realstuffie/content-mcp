@@ -6,6 +6,7 @@ import re
 from typing import Any
 
 from content_agent.core import discovery, scaffolding
+from content_agent.core.parsing.base_parser import BaseParser
 from content_agent.models.control import DocumentSection
 
 logger = logging.getLogger(__name__)
@@ -710,8 +711,8 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
     try:
         # Discovery tools
         if name == "list_products":
-            discovery_result = discovery.list_products()
-            result = [p.model_dump(mode="json") for p in discovery_result.items]
+            discovery_result: Any = discovery.list_products()
+            result: Any = [p.model_dump(mode="json") for p in discovery_result.items]
             text = json.dumps(result, indent=2)
             if discovery_result.errors:
                 warnings = "\n".join(f"- {e}" for e in discovery_result.errors)
@@ -896,6 +897,7 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
             doc_type = arguments["document_type"]
 
             # Select parser
+            parser: BaseParser
             if doc_type == "pdf":
                 parser = PDFParser()
             elif doc_type == "markdown":
@@ -1132,9 +1134,11 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
             control_id = arguments.get("control_id")
             product = arguments.get("product")
 
-            requirements = search_controls(query=query, control_id=control_id, product=product)
-            result = [r.model_dump(mode="json") for r in requirements]
-            summary = f"Found {len(requirements)} matching requirements\n\n"
+            control_requirements = search_controls(
+                query=query, control_id=control_id, product=product
+            )
+            result = [r.model_dump(mode="json") for r in control_requirements]
+            summary = f"Found {len(control_requirements)} matching requirements\n\n"
 
             return [{"type": "text", "text": summary + json.dumps(result, indent=2)}]
 
@@ -1173,15 +1177,15 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
             exclude_control_id = arguments.get("exclude_control_id")
             product = arguments.get("product")
 
-            results = find_similar_requirements(
+            similar_results = find_similar_requirements(
                 requirement_text=requirement_text,
                 min_similarity=min_similarity,
                 max_results=max_results,
                 exclude_control_id=exclude_control_id,
                 product=product,
             )
-            result = [r.model_dump(mode="json") for r in results]
-            summary = f"Found {len(results)} similar requirements\n\n"
+            result = [r.model_dump(mode="json") for r in similar_results]
+            summary = f"Found {len(similar_results)} similar requirements\n\n"
             return [{"type": "text", "text": summary + json.dumps(result, indent=2)}]
 
         elif name == "get_rule_product_availability":
@@ -1241,7 +1245,7 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
             status_filter = arguments.get("status_filter")
             product = arguments.get("product")
 
-            requirements = list_unmapped_requirements(control_id, status_filter, product=product)
+            requirements = list_unmapped_requirements(control_id, status_filter, product=product)  # type: ignore[assignment]
 
             if requirements is None:
                 return [{"type": "text", "text": f"Control not found: {control_id}"}]

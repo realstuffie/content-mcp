@@ -59,7 +59,7 @@ Be conservative - only suggest rules with confidence >= 0.3. Limit to top 10 mos
         self.client = claude_client
         self.rule_discovery = RuleDiscovery()
         if content_path:
-            self.rule_discovery.content_repo.content_path = content_path
+            self.rule_discovery.content_repo.content_path = content_path  # type: ignore[attr-defined]
 
     def suggest_rules(
         self,
@@ -88,7 +88,7 @@ Be conservative - only suggest rules with confidence >= 0.3. Limit to top 10 mos
         user_prompt = self._build_mapping_prompt(requirement, rules_context)
 
         # Append cross-framework evidence if requested
-        if cross_reference:
+        if cross_reference and requirement.description:
             cross_ref_section = self._build_cross_reference_context(requirement.description)
             if cross_ref_section:
                 user_prompt += "\n\n" + cross_ref_section

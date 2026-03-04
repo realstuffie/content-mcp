@@ -1,5 +1,7 @@
 """AI-powered requirement extraction from policy documents."""
 
+from typing import Any
+
 from content_agent.core.ai.claude_client import ClaudeClient
 from content_agent.models.control import ExtractedRequirement, ParsedDocument
 
@@ -113,7 +115,7 @@ Return the requirements as a JSON array."""
 
         requirements_data = self.client.extract_json_response(response)
 
-        requirements = []
+        requirements: list[ExtractedRequirement] = []
         if isinstance(requirements_data, list):
             for req_data in requirements_data:
                 # Ensure section_id and section_title are set
@@ -150,7 +152,7 @@ Return the requirements as a JSON array."""
 
         return "\n".join(prompt_parts)
 
-    def _format_section(self, section, depth: int = 0) -> list[str]:
+    def _format_section(self, section: Any, depth: int = 0) -> list[str]:
         """Format a section for the prompt.
 
         Args:

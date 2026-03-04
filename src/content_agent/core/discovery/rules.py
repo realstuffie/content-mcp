@@ -12,6 +12,7 @@ See docs/COMPLIANCEASCODE_REFERENCE.md for more details.
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -95,6 +96,7 @@ class RuleDiscovery:
         discovery_result: DiscoveryResult[RuleSearchResult] = DiscoveryResult()
         query_lower = query.lower() if query else None
 
+        assert self._rule_cache is not None
         for rule_id, rule_path in self._rule_cache.items():
             try:
                 # Quick ID match
@@ -158,6 +160,7 @@ class RuleDiscovery:
         if self._rule_cache is None:
             self._build_rule_index()
 
+        assert self._rule_cache is not None
         rule_path = self._rule_cache.get(rule_id)
         if not rule_path:
             logger.warning(f"Rule not found: {rule_id}")
@@ -468,7 +471,7 @@ class RuleDiscovery:
         """
         references_data = data.get("references", {})
 
-        def ensure_list(val):
+        def ensure_list(val: Any) -> list[str]:
             if isinstance(val, list):
                 return val
             elif isinstance(val, str):

@@ -2,6 +2,7 @@
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from content_agent.core.integration import get_content_repository
 from content_agent.models import DiscoveryResult, ProfileDetails, ProfileSummary
@@ -157,7 +158,7 @@ class ProfileDiscovery:
         Returns:
             Parsed data dict
         """
-        data = {
+        data: dict[str, Any] = {
             "title": None,
             "description": None,
             "extends": None,

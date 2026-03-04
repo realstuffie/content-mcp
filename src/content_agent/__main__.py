@@ -116,8 +116,8 @@ def main(
             settings.content.repository = content_repo
         if log_file:
             settings.logging.file = log_file
-        settings.logging.level = log_level
-        settings.server.mode = mode
+        settings.logging.level = log_level  # type: ignore[assignment]
+        settings.server.mode = mode  # type: ignore[assignment]
 
         # Set up logging
         setup_logging(settings.logging.level, settings.logging.file)

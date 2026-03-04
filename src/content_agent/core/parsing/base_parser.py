@@ -16,7 +16,7 @@ class ParsingError(Exception):
 class BaseParser(ABC):
     """Abstract base class for document parsers."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the parser."""
         self.metadata: dict[str, Any] = {}
 

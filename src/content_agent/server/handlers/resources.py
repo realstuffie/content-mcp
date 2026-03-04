@@ -108,11 +108,11 @@ async def handle_resource_read(uri: str) -> str:
             return json.dumps([p.model_dump() for p in profiles_result.items], indent=2)
         elif len(path_parts) == 3:
             # Get specific profile (product/profile_id)
-            product = path_parts[1]
+            product_id = path_parts[1]
             profile_id = path_parts[2]
-            profile = discovery.get_profile_details(profile_id, product)
+            profile = discovery.get_profile_details(profile_id, product_id)
             if not profile:
-                raise ValueError(f"Profile not found: {profile_id} in {product}")
+                raise ValueError(f"Profile not found: {profile_id} in {product_id}")
             import json
 
             return json.dumps(profile.model_dump(), indent=2)
@@ -139,20 +139,20 @@ async def handle_resource_read(uri: str) -> str:
             return json.dumps({"products": products, "count": len(products)}, indent=2)
         elif len(path_parts) == 2:
             # Get product datastream info
-            product = path_parts[1]
-            info = discovery.get_datastream_info(product)
+            build_product = path_parts[1]
+            info = discovery.get_datastream_info(build_product)
             if not info:
-                raise ValueError(f"No build artifacts for product: {product}")
+                raise ValueError(f"No build artifacts for product: {build_product}")
             import json
 
             return json.dumps(info.model_dump(), indent=2)
         elif len(path_parts) >= 4 and path_parts[2] == "rules":
             # Get rendered rule: build/{product}/rules/{rule_id}
-            product = path_parts[1]
+            build_product = path_parts[1]
             rule_id = path_parts[3]
-            rendered = discovery.get_rendered_rule(product, rule_id)
+            rendered = discovery.get_rendered_rule(build_product, rule_id)
             if not rendered:
-                raise ValueError(f"Rendered rule not found: {rule_id} for {product}")
+                raise ValueError(f"Rendered rule not found: {rule_id} for {build_product}")
             import json
 
             return json.dumps(rendered.model_dump(), indent=2)

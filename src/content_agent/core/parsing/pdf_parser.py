@@ -19,7 +19,7 @@ except ImportError:
 class PDFParser(BaseParser):
     """Parser for PDF documents."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize PDF parser."""
         super().__init__()
         if not PDF_AVAILABLE:

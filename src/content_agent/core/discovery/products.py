@@ -179,7 +179,7 @@ class ProductDiscovery:
         """
         # Most products use linux_os/guide, but some have custom roots
         benchmark_root = product_data.get("benchmark_root", "linux_os/guide")
-        return benchmark_root
+        return str(benchmark_root)
 
 
 def list_products() -> DiscoveryResult[ProductSummary]:

@@ -11,7 +11,7 @@ from content_agent.models.control import ParsedDocument
 class MarkdownParser(BaseParser):
     """Parser for Markdown documents."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize Markdown parser."""
         super().__init__()
 

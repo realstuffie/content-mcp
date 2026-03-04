@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
 
@@ -23,7 +23,7 @@ class folded_str(str):
     pass
 
 
-def folded_str_representer(dumper, data):
+def folded_str_representer(dumper: yaml.Dumper, data: str) -> Any:
     """Represent folded_str as folded scalar (>)."""
     if "\n" in data or len(data) > 80:
         return dumper.represent_scalar("tag:yaml.org,2002:str", data, style=">")
@@ -377,7 +377,7 @@ class ControlGenerator:
         """
         try:
             # Create parent control file content in ComplianceAsCode format
-            content = {
+            content: dict[str, Any] = {
                 "policy": policy_title,
                 "title": policy_title,
                 "id": policy_id,

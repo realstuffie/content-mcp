@@ -153,7 +153,7 @@ class HTMLParser(BaseParser):
         try:
             response = requests.get(url, timeout=self.timeout)
             response.raise_for_status()
-            return response.text
+            return str(response.text)
         except requests.RequestException as e:
             raise ParsingError(f"Failed to fetch URL {url}: {e}") from e
 
@@ -173,7 +173,7 @@ class HTMLParser(BaseParser):
             name = meta.get("name") or meta.get("property")
             content = meta.get("content")
             if name and content:
-                metadata[name] = content
+                metadata[str(name)] = content
 
         # Extract title
         title_tag = soup.find("title")

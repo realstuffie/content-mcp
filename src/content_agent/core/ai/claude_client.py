@@ -79,7 +79,7 @@ class ClaudeClient:
             # Extract text from response
             content = response.content
             if isinstance(content, list) and len(content) > 0:
-                return content[0].text
+                return content[0].text  # type: ignore[union-attr]
             return str(content)
 
         except Exception as e:
@@ -109,7 +109,7 @@ class ClaudeClient:
                 end = response.find("```", start)
                 json_match = response[start:end].strip()
 
-            return json.loads(json_match)
+            return json.loads(json_match)  # type: ignore[no-any-return]
 
         except json.JSONDecodeError as e:
             raise ClaudeAPIError(f"Failed to parse JSON response: {e}") from e
