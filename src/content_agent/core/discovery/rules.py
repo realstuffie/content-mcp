@@ -16,6 +16,7 @@ from pathlib import Path
 import yaml
 
 from content_agent.core.integration import get_content_repository
+from content_agent.core.integration.ssg_modules import get_ssg_modules
 from content_agent.models import (
     RuleDetails,
     RuleIdentifiers,
@@ -36,6 +37,28 @@ class RuleDiscovery:
         self.content_repo = get_content_repository()
         self._rule_cache: dict[str, Path] | None = None
         self._profile_rule_index: dict[str, list[tuple[str, str]]] | None = None
+
+    def _load_rule_yaml(self, rule_path: Path, product: str | None = None) -> dict:
+        """Load and parse a rule.yml file, expanding Jinja2 templates.
+
+        Uses ssg.yaml.open_and_expand() to handle Jinja2 control structures
+        that would otherwise break standard YAML parsing.
+
+        Args:
+            rule_path: Path to rule.yml
+            product: Optional product ID for product-specific expansion.
+                When provided, conditionals like {{% if product == "rhel9" %}}
+                are evaluated correctly. When None, all conditionals evaluate
+                to false (generic fallback).
+        """
+        substitutions = {"product": product} if product else {}
+        try:
+            ssg_yaml = get_ssg_modules().yaml
+            return ssg_yaml.open_and_expand(str(rule_path), substitutions)  # type: ignore[no-any-return]
+        except Exception:
+            # Fallback to direct YAML loading if ssg expansion fails
+            with open(rule_path) as f:
+                return yaml.load(f.read(), Loader=yaml.FullLoader)  # type: ignore[no-any-return]
 
     def search_rules(
         self,
@@ -70,7 +93,7 @@ class RuleDiscovery:
         for rule_id, rule_path in self._rule_cache.items():
             # Quick ID match
             if query_lower and query_lower in rule_id.lower():
-                result = self._load_search_result(rule_id, rule_path)
+                result = self._load_search_result(rule_id, rule_path, product=product)
                 if result and self._matches_filters(result, product, severity):
                     results.append(result)
                     if len(results) >= limit:
@@ -79,7 +102,7 @@ class RuleDiscovery:
 
             # Load rule for full-text search
             if query_lower:
-                result = self._load_search_result(rule_id, rule_path)
+                result = self._load_search_result(rule_id, rule_path, product=product)
                 if result and self._matches_query(result, query_lower):
                     if self._matches_filters(result, product, severity):
                         results.append(result)
@@ -87,7 +110,7 @@ class RuleDiscovery:
                             break
             else:
                 # No query, just filter
-                result = self._load_search_result(rule_id, rule_path)
+                result = self._load_search_result(rule_id, rule_path, product=product)
                 if result and self._matches_filters(result, product, severity):
                     results.append(result)
                     if len(results) >= limit:
@@ -131,10 +154,8 @@ class RuleDiscovery:
             return None
 
         try:
-            # Load YAML with Jinja2 templates
-            with open(rule_path) as f:
-                content = f.read()
-                data = yaml.load(content, Loader=yaml.FullLoader)
+            # Load YAML with Jinja2 template expansion
+            data = self._load_rule_yaml(rule_path, product=product)
 
             rule_dir = rule_path.parent
 
@@ -311,23 +332,21 @@ class RuleDiscovery:
 
         logger.info(f"Indexed {len(self._rule_cache)} rules")
 
-    def _load_search_result(self, rule_id: str, rule_path: Path) -> RuleSearchResult | None:
+    def _load_search_result(
+        self, rule_id: str, rule_path: Path, product: str | None = None
+    ) -> RuleSearchResult | None:
         """Load rule as search result.
 
         Args:
             rule_id: Rule identifier
             rule_path: Path to rule.yml
+            product: Optional product ID for Jinja2 template expansion
 
         Returns:
             RuleSearchResult or None
         """
         try:
-            # Load YAML with Jinja2 templates - use FullLoader to be more lenient
-            # This will leave Jinja2 templates as strings in the YAML
-            with open(rule_path) as f:
-                content = f.read()
-                # Try to load YAML - if it has Jinja2 templates, they'll be treated as strings
-                data = yaml.load(content, Loader=yaml.FullLoader)
+            data = self._load_rule_yaml(rule_path, product=product)
 
             # Extract products from identifiers (e.g., cce@rhel8, stigid@rhel9)
             products = self._extract_products_from_identifiers(data)
