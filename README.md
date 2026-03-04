@@ -287,6 +287,7 @@ For full parameter details and response schemas, see the [API Reference](docs/ap
 - `get_rule_product_availability` - Check which products include a given rule
 - `get_requirement_file_path` - Resolve the filesystem path for a specific requirement
 - `list_unmapped_requirements` - List requirements that need rule mappings
+- `update_requirement_rules` - Update rules and status for a requirement in a control file
 
 ### Build
 

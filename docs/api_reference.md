@@ -529,6 +529,30 @@ Resolve the filesystem path for a specific requirement in a control file. Handle
 }
 ```
 
+#### update_requirement_rules
+
+Update the rules list and status for a specific requirement in a control file. Handles both inline (monolithic YAML) and directory-based (controls_dir) formats. Preserves Jinja2 templating, comments, and formatting.
+
+**Parameters:**
+- `control_id` (string, required): Control framework identifier (e.g., "anssi", "srg_gpos")
+- `requirement_id` (string, required): Requirement identifier (e.g., "R1", "SRG-OS-000001-GPOS-00001")
+- `rules` (array of strings, required): Rule IDs to set for this requirement (replaces existing rules)
+- `status` (string, optional): Status to set (default: "automated"). Enum: `automated`, `partially_automated`, `manual`, `not_applicable`, `pending`
+
+**Returns:** ControlUpdateResult object
+
+**Example:**
+```json
+{
+  "file_path": "/path/to/content/controls/anssi.yml",
+  "requirements_added": 0,
+  "requirements_updated": 1,
+  "requirements_unchanged": 0,
+  "success": true,
+  "errors": []
+}
+```
+
 #### list_unmapped_requirements
 
 List requirements in a control file that need rule mappings. Returns requirements filtered by status, defaulting to "pending". Lighter than `get_control_details` when you only need the work queue.

@@ -586,6 +586,41 @@ TOOLS = [
             "required": ["control_id"],
         },
     },
+    # Scaffolding tools - write operations
+    {
+        "name": "update_requirement_rules",
+        "description": "Update the rules list and status for a specific requirement in a control file. Handles both inline (monolithic YAML) and directory-based (controls_dir) formats. Preserves Jinja2 templating, comments, and formatting.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "control_id": {
+                    "type": "string",
+                    "description": "Control framework identifier (e.g., 'anssi', 'srg_gpos')",
+                },
+                "requirement_id": {
+                    "type": "string",
+                    "description": "Requirement identifier (e.g., 'R1', 'SRG-OS-000001-GPOS-00001')",
+                },
+                "rules": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Rule IDs to set for this requirement (replaces existing rules)",
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "automated",
+                        "partially_automated",
+                        "manual",
+                        "not_applicable",
+                        "pending",
+                    ],
+                    "description": "Status to set (default: 'automated')",
+                },
+            },
+            "required": ["control_id", "requirement_id", "rules"],
+        },
+    },
 ]
 
 
@@ -1153,6 +1188,39 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
             result = [r.model_dump(mode="json") for r in requirements]
             summary = f"Found {len(requirements)} unmapped requirements in '{control_id}'\n\n"
             return [{"type": "text", "text": summary + json.dumps(result, indent=2)}]
+
+        elif name == "update_requirement_rules":
+            from content_agent.core.scaffolding.control_updater import ControlUpdater
+
+            control_id = arguments["control_id"]
+            requirement_id = arguments["requirement_id"]
+            rules = arguments["rules"]
+            status = arguments.get("status", "automated")
+
+            updater = ControlUpdater()
+            result = updater.update_requirement_rules(
+                control_id=control_id,
+                requirement_id=requirement_id,
+                rules=rules,
+                status=status,
+            )
+
+            if not result.success:
+                error_text = f"Update failed: {'; '.join(result.errors)}"
+                return [{"type": "text", "text": error_text}]
+
+            summary = (
+                f"Updated requirement '{requirement_id}' in '{control_id}'\n"
+                f"Rules set: {rules}\n"
+                f"Status: {status}\n"
+                f"File: {result.file_path}\n\n"
+            )
+            return [
+                {
+                    "type": "text",
+                    "text": summary + json.dumps(result.model_dump(mode="json"), indent=2),
+                }
+            ]
 
         else:
             raise ValueError(f"Unknown tool: {name}")
