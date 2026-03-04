@@ -6,7 +6,7 @@ The `parse_policy_document` MCP tool schema SHALL include an optional `requireme
 - **THEN** the `parse_policy_document` tool's `inputSchema.properties` SHALL contain a `requirement_id` field with `type: "string"` and a description indicating it filters sections by requirement ID
 
 ### Requirement: Filtered response when requirement_id is provided
-When `requirement_id` is provided, the tool SHALL return the same `ParsedDocument` JSON structure with `sections` filtered to contain only the section whose title or content matches the requirement ID. When the matched section has empty content due to flat-heading document structure, the tool SHALL collect following sibling sections that belong to the same requirement and include their content in the returned section.
+When `requirement_id` is provided, the tool SHALL return the same `ParsedDocument` JSON structure with `sections` filtered to contain only the section whose title or content matches the requirement ID. When the matched section has empty content due to flat-heading document structure, the tool SHALL collect following sibling sections that belong to the same requirement and include their content in the returned section. The boundary-detection pattern used to identify the next requirement heading SHALL match requirement IDs preceded by markdown formatting characters (such as `*`, `>`, `)`, `]`, `#`) in addition to whitespace or start-of-string.
 
 #### Scenario: Match found in section title (ANSSI R-code)
 - **WHEN** `parse_policy_document` is called with `requirement_id="R34"` on an ANSSI document containing a section titled "R34 M I Disabling the service accounts"
@@ -24,6 +24,19 @@ When `requirement_id` is provided, the tool SHALL return the same `ParsedDocumen
 - **WHEN** `parse_policy_document` is called with `requirement_id="5.3.2.5"` on a CIS RHEL 9 benchmark with flat level-1 headings
 - **THEN** the response `sections` array SHALL contain exactly one entry
 - **AND** that entry's `content` SHALL include Description, Rationale, Audit, and Remediation text from the following sibling sections
+
+#### Scenario: CIS flat-heading with HTML spans and bold markers stops at next requirement
+- **WHEN** `parse_policy_document` is called with `requirement_id="5.3.2.5"` on a CIS document where headings contain `<span>` tags and `**` bold markers before dotted numbers (e.g., `<span id="page-601-0"></span>**5.3.3 Configure PAM Arguments**`)
+- **THEN** the response `sections` array SHALL contain exactly one entry for requirement 5.3.2.5
+- **AND** the entry's `content` SHALL NOT include content from the next requirement (5.3.3)
+
+#### Scenario: Boundary pattern matches requirement ID after bold markers
+- **WHEN** the boundary-detection pattern is applied to a heading title `<span id="page-601-0"></span>**5.3.3 Configure PAM Arguments**`
+- **THEN** the pattern SHALL match the requirement ID `5.3.3`
+
+#### Scenario: Boundary pattern matches requirement ID after italic marker
+- **WHEN** the boundary-detection pattern is applied to a heading title `*5.3.2.5 Ensure pam_unix*`
+- **THEN** the pattern SHALL match the requirement ID `5.3.2.5`
 
 ### Requirement: Word-boundary matching prevents partial matches
 The requirement ID matching SHALL use word-boundary-aware matching that prevents partial ID matches. Dots and word characters adjacent to the ID SHALL prevent a match.
