@@ -14,6 +14,19 @@ def _write_yaml(path: Path, data: dict) -> None:
         yaml.dump(data, f)
 
 
+def _mock_product_discovery(known_products: list[str]):
+    """Create a mock ProductDiscovery that returns given product IDs."""
+    from content_agent.models.common import DiscoveryResult
+
+    mock_cls = MagicMock()
+    mock_instance = MagicMock()
+    mock_instance.list_products.return_value = DiscoveryResult(
+        items=[MagicMock(product_id=pid) for pid in known_products]
+    )
+    mock_cls.return_value = mock_instance
+    return mock_cls
+
+
 class TestRequirementFilePathModel:
     """Test RequirementFilePath Pydantic model."""
 
@@ -66,8 +79,12 @@ class TestGetRequirementFilePath:
 
         from content_agent.core.discovery.controls import ControlDiscovery
 
-        discovery = ControlDiscovery()
-        result = discovery.get_requirement_file_path("anssi", "R1")
+        with patch(
+            "content_agent.core.discovery.products.ProductDiscovery",
+            _mock_product_discovery([]),
+        ):
+            discovery = ControlDiscovery()
+            result = discovery.get_requirement_file_path("anssi", "R1")
 
         assert result is not None
         assert result.format == "inline"
@@ -98,8 +115,12 @@ class TestGetRequirementFilePath:
 
         from content_agent.core.discovery.controls import ControlDiscovery
 
-        discovery = ControlDiscovery()
-        result = discovery.get_requirement_file_path("srg_gpos", "SRG-OS-000001")
+        with patch(
+            "content_agent.core.discovery.products.ProductDiscovery",
+            _mock_product_discovery([]),
+        ):
+            discovery = ControlDiscovery()
+            result = discovery.get_requirement_file_path("srg_gpos", "SRG-OS-000001")
 
         assert result is not None
         assert result.format == "directory"
@@ -124,8 +145,12 @@ class TestGetRequirementFilePath:
 
         from content_agent.core.discovery.controls import ControlDiscovery
 
-        discovery = ControlDiscovery()
-        result = discovery.get_requirement_file_path("srg_gpos", "SRG-OS-999999")
+        with patch(
+            "content_agent.core.discovery.products.ProductDiscovery",
+            _mock_product_discovery([]),
+        ):
+            discovery = ControlDiscovery()
+            result = discovery.get_requirement_file_path("srg_gpos", "SRG-OS-999999")
 
         assert result is not None
         assert result.format == "directory"
@@ -141,8 +166,12 @@ class TestGetRequirementFilePath:
 
         from content_agent.core.discovery.controls import ControlDiscovery
 
-        discovery = ControlDiscovery()
-        result = discovery.get_requirement_file_path("nonexistent", "R1")
+        with patch(
+            "content_agent.core.discovery.products.ProductDiscovery",
+            _mock_product_discovery([]),
+        ):
+            discovery = ControlDiscovery()
+            result = discovery.get_requirement_file_path("nonexistent", "R1")
 
         assert result is None
 
@@ -166,8 +195,12 @@ class TestGetRequirementFilePath:
 
         from content_agent.core.discovery.controls import ControlDiscovery
 
-        discovery = ControlDiscovery()
-        result = discovery.get_requirement_file_path("anssi", "NONEXISTENT")
+        with patch(
+            "content_agent.core.discovery.products.ProductDiscovery",
+            _mock_product_discovery([]),
+        ):
+            discovery = ControlDiscovery()
+            result = discovery.get_requirement_file_path("anssi", "NONEXISTENT")
 
         assert result is None
 
@@ -191,8 +224,12 @@ class TestGetRequirementFilePath:
 
         from content_agent.core.discovery.controls import ControlDiscovery
 
-        discovery = ControlDiscovery()
-        result = discovery.get_requirement_file_path("test", "R1")
+        with patch(
+            "content_agent.core.discovery.products.ProductDiscovery",
+            _mock_product_discovery([]),
+        ):
+            discovery = ControlDiscovery()
+            result = discovery.get_requirement_file_path("test", "R1")
 
         assert result is not None
         assert result.file_path.is_absolute()

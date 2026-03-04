@@ -388,6 +388,7 @@ class TestGenerateControlStructureProduct:
             policy_id="my_policy",
             policy_title="My Policy",
             requirements=reqs,
+            format="inline",
             product="rhel9",
         )
 
@@ -417,6 +418,7 @@ class TestGenerateControlStructureProduct:
             policy_id="my_policy",
             policy_title="My Policy",
             requirements=reqs,
+            format="inline",
         )
 
         assert result.success is True

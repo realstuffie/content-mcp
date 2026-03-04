@@ -121,6 +121,7 @@ class TestITSARWorkflow:
                 policy_id="itsar_os",
                 policy_title="ITSAR Operating System Requirements",
                 requirements=requirements,
+                format="directory",
                 output_dir=output_dir,
                 source_document="ITSAR701012411.pdf",
             )
@@ -158,6 +159,7 @@ class TestITSARWorkflow:
                 policy_id="test_itsar",
                 policy_title="Test ITSAR",
                 requirements=requirements,
+                format="directory",
                 output_dir=output_dir,
                 source_document="test.pdf",
             )
@@ -297,6 +299,7 @@ class TestControlWorkflowWithoutAI:
                 policy_id="itsar_os_security",
                 policy_title="ITSAR Operating System Security Requirements",
                 requirements=requirements,
+                format="directory",
                 output_dir=output_dir,
                 source_document=str(ITSAR_PDF),
             )
