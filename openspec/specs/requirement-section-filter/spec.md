@@ -6,7 +6,7 @@ The `parse_policy_document` MCP tool schema SHALL include an optional `requireme
 - **THEN** the `parse_policy_document` tool's `inputSchema.properties` SHALL contain a `requirement_id` field with `type: "string"` and a description indicating it filters sections by requirement ID
 
 ### Requirement: Filtered response when requirement_id is provided
-When `requirement_id` is provided, the tool SHALL return the same `ParsedDocument` JSON structure with `sections` filtered to contain only the section whose title or content matches the requirement ID.
+When `requirement_id` is provided, the tool SHALL return the same `ParsedDocument` JSON structure with `sections` filtered to contain only the section whose title or content matches the requirement ID. When the matched section has empty content due to flat-heading document structure, the tool SHALL collect following sibling sections that belong to the same requirement and include their content in the returned section.
 
 #### Scenario: Match found in section title (ANSSI R-code)
 - **WHEN** `parse_policy_document` is called with `requirement_id="R34"` on an ANSSI document containing a section titled "R34 M I Disabling the service accounts"
@@ -19,6 +19,11 @@ When `requirement_id` is provided, the tool SHALL return the same `ParsedDocumen
 #### Scenario: Match found in section content (STIG ID)
 - **WHEN** `parse_policy_document` is called with `requirement_id="RHEL-09-171011"` on a STIG document where the ID appears in section body text but not the title
 - **THEN** the response `sections` array SHALL contain exactly one entry for the section containing that ID in its content
+
+#### Scenario: CIS flat-heading document returns body content
+- **WHEN** `parse_policy_document` is called with `requirement_id="5.3.2.5"` on a CIS RHEL 9 benchmark with flat level-1 headings
+- **THEN** the response `sections` array SHALL contain exactly one entry
+- **AND** that entry's `content` SHALL include Description, Rationale, Audit, and Remediation text from the following sibling sections
 
 ### Requirement: Word-boundary matching prevents partial matches
 The requirement ID matching SHALL use word-boundary-aware matching that prevents partial ID matches. Dots and word characters adjacent to the ID SHALL prevent a match.
