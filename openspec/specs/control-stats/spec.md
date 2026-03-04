@@ -14,6 +14,8 @@ The `ControlStats` model SHALL be a Pydantic v2 `BaseModel` defined in `models/c
 
 When `product` is provided, the tool SHALL resolve the control file using product-aware discovery (global + product-specific directories with override semantics).
 
+The `ControlRequirement` model SHALL treat `description` as an optional field (`str | None`, default `None`). Control files that omit `description` on their entries SHALL parse successfully.
+
 #### Scenario: Control with mixed statuses
 
 - **WHEN** `get_control_stats` is called with a `control_id` whose control file has requirements with statuses `automated`, `pending`, `partial`, and `not applicable`
@@ -38,6 +40,11 @@ When `product` is provided, the tool SHALL resolve the control file using produc
 
 - **WHEN** `get_control_stats(control_id="cis_rhel9", product="rhel9")` is called and `cis_rhel9.yml` exists in `products/rhel9/controls/`
 - **THEN** the stats SHALL be computed from the product-specific control file
+
+#### Scenario: Control file without description fields
+
+- **WHEN** `get_control_stats` is called for a control file whose entries have `title` and `notes` but no `description` field
+- **THEN** the control file SHALL parse successfully and stats SHALL be computed normally
 
 ### Requirement: Handle nonexistent control
 
