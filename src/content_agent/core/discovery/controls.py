@@ -252,7 +252,7 @@ class ControlDiscovery:
                 # Search in title and description
                 if (
                     query_lower in req.title.lower()
-                    or query_lower in req.description.lower()
+                    or query_lower in (req.description or "").lower()
                     or query_lower in req.id.lower()
                 ):
                     results.append(req)
@@ -533,7 +533,7 @@ class ControlDiscovery:
             if exclude_control_id and req.control_id == exclude_control_id:
                 continue
 
-            req_tokens = self._tokenize(req.title + " " + req.description)
+            req_tokens = self._tokenize(req.title + " " + (req.description or ""))
             similarity = self._jaccard_similarity(query_tokens, req_tokens)
 
             if similarity >= min_similarity:

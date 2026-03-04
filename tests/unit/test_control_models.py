@@ -43,6 +43,22 @@ def test_control_requirement_with_rules():
     assert req.status == "automated"
 
 
+def test_control_requirement_without_description():
+    """Test ControlRequirement without description (upstream CIS format)."""
+    req = ControlRequirement(
+        id="1.1.1.1",
+        title="Ensure mounting of cramfs filesystems is disabled",
+        status="automated",
+        rules=["kernel_module_cramfs_disabled"],
+        levels=["l1_server", "l1_workstation"],
+    )
+
+    assert req.id == "1.1.1.1"
+    assert req.description is None
+    assert req.status == "automated"
+    assert len(req.rules) == 1
+
+
 def test_control_file_basic():
     """Test basic ControlFile creation."""
     control = ControlFile(

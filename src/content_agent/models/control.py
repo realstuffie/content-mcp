@@ -18,8 +18,8 @@ class ControlRequirement(BaseModel):
         ...,
         description="Requirement title or short description",
     )
-    description: str = Field(
-        ...,
+    description: str | None = Field(
+        default=None,
         description="Full requirement text (exact from source, no rewording)",
     )
     rules: list[str] = Field(
@@ -75,9 +75,9 @@ class ControlLevel(BaseModel):
         default=None,
         description="Level description",
     )
-    inherits_from: str | None = Field(
+    inherits_from: list[str] | None = Field(
         default=None,
-        description="Parent level ID this level inherits from",
+        description="Parent level IDs this level inherits from",
     )
 
 
@@ -311,7 +311,9 @@ class IndexedRequirement(BaseModel):
         ..., description="Requirement ID within the control (e.g., 'R1', 'AC-2(5)')"
     )
     title: str = Field(..., description="Requirement title")
-    description: str = Field(..., description="Requirement description (truncated for index)")
+    description: str = Field(
+        default="", description="Requirement description (truncated for index)"
+    )
     rules: list[str] = Field(default_factory=list, description="Mapped rule IDs")
     status: str = Field(default="pending", description="Implementation status")
     levels: list[str] = Field(default_factory=list, description="Compliance levels")
