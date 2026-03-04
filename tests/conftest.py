@@ -44,31 +44,32 @@ requires_content_repo = pytest.mark.skipif(
 )
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def real_content_repo():
-    """Initialize the real content repository (session-scoped).
+    """Initialize the real content repository.
 
     Only available when a real ComplianceAsCode/content repo is found.
+    Re-initializes global state if it was cleared by another fixture.
     """
-    assert CONTENT_REPO_PATH is not None
-    initialize_settings()
-    repo = initialize_content_repository(CONTENT_REPO_PATH)
-
-    # Initialize SSG modules from the real repo
-    from content_agent.core.integration import initialize_ssg_modules
-
-    initialize_ssg_modules()
-
-    yield repo
-
-    # Cleanup global state
     import content_agent.config.settings as settings_module
     import content_agent.core.integration.content_manager as cm
     import content_agent.core.integration.ssg_modules as sm
 
-    settings_module._settings = None
-    cm._content_repo = None
-    sm._ssg_modules = None
+    assert CONTENT_REPO_PATH is not None
+
+    # Re-initialize if global state was cleared by another fixture
+    if settings_module._settings is None:
+        initialize_settings()
+    if cm._content_repo is None:
+        repo = initialize_content_repository(CONTENT_REPO_PATH)
+    else:
+        repo = cm._content_repo
+    if sm._ssg_modules is None:
+        from content_agent.core.integration import initialize_ssg_modules
+
+        initialize_ssg_modules()
+
+    yield repo
 
 
 @pytest.fixture

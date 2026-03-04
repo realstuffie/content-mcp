@@ -174,8 +174,12 @@ severity: {severity}
         result = await handle_tool_call("search_rules", {"query": "ssh", "limit": 3})
 
         response_text = result[0]["text"]
-        # Extract JSON part (after summary line)
-        json_start = response_text.index("[")
+        # Extract JSON array (find the last top-level '[' which starts the results)
+        json_start = response_text.rfind("\n[")
+        if json_start == -1:
+            json_start = response_text.index("[")
+        else:
+            json_start += 1  # skip the newline
         data = json.loads(response_text[json_start:])
 
         # Should respect limit
