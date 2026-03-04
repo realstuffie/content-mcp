@@ -244,14 +244,18 @@ Run with: `content-agent --config config.yaml`
 
 ## Available Tools
 
+For full parameter details and response schemas, see the [API Reference](docs/api_reference.md).
+
 ### Discovery
 
 - `list_products` - List all available products
 - `get_product_details` - Get product information
 - `search_rules` - Search rules by keyword, product, severity
-- `get_rule_details` - Get complete rule information (automatically includes rendered content from builds!)
+- `get_rule_details` - Get complete rule information (automatically includes rendered content from builds)
 - `list_templates` - List available templates
 - `get_template_schema` - Get template parameter schema
+- `list_profiles` - List profiles for a product or all products
+- `get_profile_details` - Get detailed profile information
 
 ### Build Artifacts
 
@@ -276,7 +280,13 @@ Run with: `content-agent --config config.yaml`
 - `review_control_generation` - Review generated controls with validation and suggestions
 - `list_controls` - List available control frameworks
 - `get_control_details` - Get control framework details
+- `get_control_stats` - Get aggregate requirement statistics for a control file
 - `search_control_requirements` - Search within control requirements
+- `get_control_rule_index` - Build a complete index of requirements and rule mappings across frameworks
+- `find_similar_requirements` - Find requirements with similar text across control frameworks
+- `get_rule_product_availability` - Check which products include a given rule
+- `get_requirement_file_path` - Resolve the filesystem path for a specific requirement
+- `list_unmapped_requirements` - List requirements that need rule mappings
 
 ### Build
 
