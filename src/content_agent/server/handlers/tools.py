@@ -634,7 +634,7 @@ TOOLS = [
 ]
 
 
-_REQ_ID_PATTERN = re.compile(r"(?:^|\s)(\d+(?:\.\d+){2,}|R\d+)\b")
+_REQ_ID_PATTERN = re.compile(r"(?:^|[\s*>)\]#])(\d+(?:\.\d+){2,}|R\d+)\b")
 
 
 def _find_section_by_requirement_id(

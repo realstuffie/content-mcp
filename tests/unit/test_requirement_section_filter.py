@@ -172,6 +172,39 @@ class TestFindSectionByRequirementId:
         assert result.content == "intro"
         assert len(result.subsections) == 2
 
+    def test_req_id_pattern_matches_through_bold_markers(self) -> None:
+        """_REQ_ID_PATTERN must match IDs preceded by markdown bold markers."""
+        from content_agent.server.handlers.tools import _REQ_ID_PATTERN
+
+        assert _REQ_ID_PATTERN.search(
+            '<span id="page-601-0"></span>**5.3.3 Configure PAM Arguments**'
+        )
+        assert _REQ_ID_PATTERN.search("*5.3.2.5 Ensure pam_unix*")
+        # Existing cases must still work
+        assert _REQ_ID_PATTERN.search("5.3.2.5 Ensure pam_unix")
+        assert _REQ_ID_PATTERN.search("R34 Disabling service accounts")
+
+    def test_flat_heading_cis_with_span_and_bold_markers(self) -> None:
+        """CIS markdown has <span> and ** in headings — pattern must still detect boundaries."""
+        sections = [
+            _make_section(
+                '<span id="page-598-0"></span>*5.3.2.5 Ensure pam_unix module is enabled'
+                " (Automated)*"
+            ),
+            _make_section("**Profile Applicability:**", content="- Level 1 Server"),
+            _make_section("**Description:**", content="The pam_unix.so module..."),
+            _make_section("**Remediation:**", content="Edit /etc/pam.d/..."),
+            _make_section('<span id="page-601-0"></span>**5.3.3 Configure PAM Arguments**'),
+            _make_section("**Description:**", content="PAM arguments description"),
+        ]
+        result = _find_section_by_requirement_id(sections, "5.3.2.5")
+        assert result is not None
+        assert "5.3.2.5" in result.title
+        assert "pam_unix.so module" in result.content
+        assert "Edit /etc/pam.d/" in result.content
+        # Must NOT include content from the next requirement (5.3.3)
+        assert "PAM arguments description" not in result.content
+
 
 class TestParseToolRequirementFiltering:
     """Tests for handler-level filtering behavior (via _find_section_by_requirement_id)."""
