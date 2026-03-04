@@ -350,6 +350,21 @@ class ControlStats(BaseModel):
     unmapped: int = Field(..., description="Requirements with no rules")
 
 
+class RequirementFilePath(BaseModel):
+    """Resolved file path for a control requirement."""
+
+    control_id: str = Field(..., description="Control framework ID")
+    requirement_id: str = Field(..., description="Requirement ID")
+    file_path: Path = Field(
+        ..., description="Absolute path to the file containing this requirement"
+    )
+    format: Literal["inline", "directory"] = Field(
+        ...,
+        description="Whether requirement is in a monolithic file (inline) or its own file (directory)",
+    )
+    exists: bool = Field(..., description="Whether the resolved file exists on disk")
+
+
 class ControlUpdateResult(BaseModel):
     """Result of updating an existing control file."""
 

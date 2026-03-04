@@ -508,6 +508,27 @@ Check which products include a given rule, via identifiers, profile selections, 
 
 **Returns:** RuleProductAvailability object
 
+#### get_requirement_file_path
+
+Resolve the filesystem path for a specific requirement in a control file. Handles both inline (monolithic YAML) and directory-based (controls_dir) formats.
+
+**Parameters:**
+- `control_id` (string, required): Control framework identifier (e.g., "anssi", "srg_gpos")
+- `requirement_id` (string, required): Requirement identifier (e.g., "R1", "SRG-OS-000001-GPOS-00001")
+
+**Returns:** RequirementFilePath object
+
+**Example:**
+```json
+{
+  "control_id": "srg_gpos",
+  "requirement_id": "SRG-OS-000001-GPOS-00001",
+  "file_path": "/path/to/content/controls/srg_gpos/SRG-OS-000001-GPOS-00001.yml",
+  "format": "directory",
+  "exists": true
+}
+```
+
 ## Data Models
 
 ### ProductSummary
@@ -751,6 +772,18 @@ Check which products include a given rule, via identifiers, profile selections, 
   platforms: string[];
   template?: Record<string, any>;
   has_build_artifacts: Record<string, boolean>;
+}
+```
+
+### RequirementFilePath
+
+```typescript
+{
+  control_id: string;
+  requirement_id: string;
+  file_path: string;
+  format: "inline" | "directory";
+  exists: boolean;
 }
 ```
 

@@ -24,6 +24,7 @@ from content_agent.models.control import (
     ExtractedRequirement,
     IndexedRequirement,
     ParsedDocument,
+    RequirementFilePath,
     RuleSuggestion,
     SimilarRequirement,
 )
@@ -74,6 +75,7 @@ __all__ = [
     "ControlStats",
     "ControlUpdateResult",
     "ControlValidationResult",
+    "RequirementFilePath",
     "DocumentSection",
     "ExtractedRequirement",
     "IndexedRequirement",

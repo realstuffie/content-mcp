@@ -12,6 +12,7 @@ from content_agent.models.control import (
     ControlRuleIndex,
     ControlStats,
     IndexedRequirement,
+    RequirementFilePath,
     SimilarRequirement,
 )
 
@@ -450,6 +451,57 @@ class ControlDiscovery:
         logger.info(f"Found {len(results)} similar requirements (returning top {max_results})")
         return results[:max_results]
 
+    def get_requirement_file_path(
+        self, control_id: str, requirement_id: str
+    ) -> RequirementFilePath | None:
+        """Resolve the filesystem path for a specific requirement.
+
+        Handles both inline (monolithic YAML) and directory-based (controls_dir) formats.
+
+        Args:
+            control_id: Control framework identifier
+            requirement_id: Requirement identifier
+
+        Returns:
+            RequirementFilePath with resolved path, or None if not found
+        """
+        logger.debug(f"Resolving path for {control_id}/{requirement_id}")
+
+        controls_dir = self.content_repo.path / "controls"
+        control_file = controls_dir / f"{control_id}.yml"
+
+        if not control_file.exists():
+            logger.warning(f"Control file not found: {control_file}")
+            return None
+
+        with open(control_file) as f:
+            data = yaml.safe_load(f)
+
+        # Directory-based format: controls_dir field points to subdirectory
+        if data.get("controls_dir"):
+            req_file = controls_dir / data["controls_dir"] / f"{requirement_id}.yml"
+            return RequirementFilePath(
+                control_id=control_id,
+                requirement_id=requirement_id,
+                file_path=req_file.resolve(),
+                format="directory",
+                exists=req_file.exists(),
+            )
+
+        # Inline format: requirement must exist in the controls list
+        for req in data.get("controls", []):
+            if isinstance(req, dict) and req.get("id") == requirement_id:
+                return RequirementFilePath(
+                    control_id=control_id,
+                    requirement_id=requirement_id,
+                    file_path=control_file.resolve(),
+                    format="inline",
+                    exists=True,
+                )
+
+        logger.debug(f"Requirement {requirement_id} not found in {control_id}")
+        return None
+
     def _parse_requirement_file(self, file_path: Path) -> ControlRequirement | None:
         """Parse individual requirement file.
 
@@ -535,6 +587,20 @@ def get_control_stats(control_id: str) -> ControlStats | None:
     """
     discovery = ControlDiscovery()
     return discovery.get_control_stats(control_id)
+
+
+def get_requirement_file_path(control_id: str, requirement_id: str) -> RequirementFilePath | None:
+    """Resolve the filesystem path for a specific requirement.
+
+    Args:
+        control_id: Control framework identifier
+        requirement_id: Requirement identifier
+
+    Returns:
+        RequirementFilePath with resolved path, or None if not found
+    """
+    discovery = ControlDiscovery()
+    return discovery.get_requirement_file_path(control_id, requirement_id)
 
 
 def find_similar_requirements(

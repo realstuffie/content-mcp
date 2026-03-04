@@ -6,7 +6,11 @@ from content_agent.core.discovery.build_artifacts import (
     list_built_products,
     search_rendered_content,
 )
-from content_agent.core.discovery.controls import get_control_stats, list_controls
+from content_agent.core.discovery.controls import (
+    get_control_stats,
+    get_requirement_file_path,
+    list_controls,
+)
 from content_agent.core.discovery.products import get_product_details, list_products
 from content_agent.core.discovery.profiles import get_profile_details, list_profiles
 from content_agent.core.discovery.rules import get_rule_details, search_rules
@@ -27,6 +31,7 @@ __all__ = [
     "get_template_schema",
     # Controls
     "get_control_stats",
+    "get_requirement_file_path",
     "list_controls",
     # Build artifacts
     "list_built_products",

@@ -549,6 +549,24 @@ TOOLS = [
             "required": ["query"],
         },
     },
+    {
+        "name": "get_requirement_file_path",
+        "description": "Resolve the filesystem path for a specific requirement in a control file. Handles both inline (monolithic YAML) and directory-based (controls_dir) formats.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "control_id": {
+                    "type": "string",
+                    "description": "Control framework identifier (e.g., 'anssi', 'srg_gpos')",
+                },
+                "requirement_id": {
+                    "type": "string",
+                    "description": "Requirement identifier (e.g., 'R1', 'SRG-OS-000001-GPOS-00001')",
+                },
+            },
+            "required": ["control_id", "requirement_id"],
+        },
+    },
 ]
 
 
@@ -1072,6 +1090,33 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
                 {
                     "type": "text",
                     "text": summary + json.dumps(availability.model_dump(mode="json"), indent=2),
+                }
+            ]
+
+        elif name == "get_requirement_file_path":
+            from content_agent.core.discovery.controls import get_requirement_file_path
+
+            control_id = arguments["control_id"]
+            requirement_id = arguments["requirement_id"]
+            result = get_requirement_file_path(control_id, requirement_id)
+
+            if not result:
+                return [
+                    {
+                        "type": "text",
+                        "text": f"Requirement '{requirement_id}' not found in control '{control_id}'",
+                    }
+                ]
+
+            summary = (
+                f"Requirement '{requirement_id}' in '{control_id}': "
+                f"format={result.format}, exists={result.exists}\n"
+                f"Path: {result.file_path}\n\n"
+            )
+            return [
+                {
+                    "type": "text",
+                    "text": summary + json.dumps(result.model_dump(mode="json"), indent=2),
                 }
             ]
 
