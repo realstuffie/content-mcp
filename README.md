@@ -1,7 +1,5 @@
-# content-agent
+# content-mcp
 
-[![CI](https://github.com/ggbecker/content-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/ggbecker/content-agent/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/ggbecker/content-agent/branch/main/graph/badge.svg)](https://codecov.io/gh/ggbecker/content-agent)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
@@ -12,15 +10,12 @@ MCP (Model Context Protocol) server for the ComplianceAsCode/content project, en
 - **Content Discovery**: Search and explore rules, profiles, products, and templates
 - **Build Artifacts**: Access rendered content from build directories (post-Jinja processing)
 - **Rule Scaffolding**: Generate rule boilerplate with validation
-- **Control File Generation**: Create control files from security policy documents (NEW)
+- **Control File Generation**: Create control files from security policy documents
   - Parse PDF, Markdown, HTML, and text policy documents
   - Extract requirements with exact text preservation
   - AI-powered rule mapping suggestions (requires Claude API key)
   - Automatic file structure generation organized by section
   - Validation and review tools
-- **Build Integration**: Trigger and monitor product/rule builds
-- **Test Automation**: Execute and track Automatus test runs
-- **Dual Transport**: stdio (Claude Desktop) and HTTP modes
 
 ## Quick Start
 
@@ -36,8 +31,8 @@ MCP (Model Context Protocol) server for the ComplianceAsCode/content project, en
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/ggbecker/content-agent.git
-   cd content-agent
+   git clone https://github.com/ComplianceAsCode/content-mcp.git
+   cd content-mcp
    ```
 
 2. Install in development mode:
@@ -192,18 +187,6 @@ Then check `/tmp/content-agent.log` for detailed error messages.
 CONTENT_AGENT_CONTENT__REPOSITORY=/path/to/content
 CONTENT_AGENT_CONTENT__BRANCH=main
 
-# Server mode
-CONTENT_AGENT_SERVER__MODE=stdio  # or http
-CONTENT_AGENT_SERVER__HTTP__PORT=8080
-
-# Build settings
-CONTENT_AGENT_BUILD__MAX_CONCURRENT_BUILDS=2
-CONTENT_AGENT_BUILD__TIMEOUT=3600
-
-# Testing settings
-CONTENT_AGENT_TESTING__BACKEND=podman
-CONTENT_AGENT_TESTING__MAX_CONCURRENT_TESTS=4
-
 # AI settings (for control file generation features)
 CONTENT_AGENT_AI__ENABLED=true
 CONTENT_AGENT_AI__CLAUDE_API_KEY=your_api_key_here
@@ -220,17 +203,6 @@ Create `config.yaml`:
 content:
   repository: /path/to/content
   branch: main
-
-server:
-  mode: stdio
-
-build:
-  max_concurrent_builds: 2
-  timeout: 3600
-
-testing:
-  backend: podman
-  max_concurrent_tests: 4
 
 ai:
   enabled: true
@@ -269,7 +241,6 @@ For full parameter details and response schemas, see the [API Reference](docs/ap
 - `generate_rule_boilerplate` - Generate basic rule structure
 - `generate_rule_from_template` - Generate rule using template
 - `validate_rule_yaml` - Validate rule.yml structure
-- `generate_profile_boilerplate` - Generate profile structure
 
 ### Control Files
 
@@ -287,18 +258,6 @@ For full parameter details and response schemas, see the [API Reference](docs/ap
 - `get_requirement_file_path` - Resolve the filesystem path for a specific requirement (optional `product` to scope)
 - `list_unmapped_requirements` - List requirements that need rule mappings (optional `product` to scope)
 - `update_requirement_rules` - Update rules and status for a requirement in a control file (optional `product` to scope)
-
-### Build
-
-- `build_product` - Build complete product datastream
-- `build_rule` - Build thin datastream for single rule
-- `get_build_status` - Get build job status and logs
-
-### Testing
-
-- `run_rule_tests` - Execute Automatus tests for a rule
-- `run_profile_tests` - Execute tests for all rules in profile
-- `get_test_results` - Get test execution results
 
 ## Example Workflows
 
@@ -321,22 +280,6 @@ Claude: [calls generate_rule_boilerplate(...)]
 Claude: "Created rule structure at linux_os/guide/services/ssh/..."
 Claude: [calls validate_rule_yaml(...)]
 Claude: "Rule validates successfully!"
-```
-
-### Build and Test
-
-```
-User: "Build my new rule for RHEL 9"
-Claude: [calls build_rule(product="rhel9", rule_id="sshd_max_auth_tries")]
-Claude: "Build started (job: build_123)..."
-Claude: [polls get_build_status(job_id="build_123")]
-Claude: "Build completed! Datastream at /path/to/build/..."
-
-User: "Run tests"
-Claude: [calls run_rule_tests(...)]
-Claude: "Tests started (job: test_456)..."
-Claude: [polls get_test_results(job_id="test_456")]
-Claude: "All 5 test scenarios passed!"
 ```
 
 ### Create Control Files from Policy Document
@@ -379,14 +322,13 @@ Claude: "Review Report:
 │  ┌────────────────────────────┐  │
 │  │ Core Business Logic        │  │
 │  │ - Discovery, Scaffolding   │  │
-│  │ - Build, Testing           │  │
 │  │ - Control File Generation  │  │
 │  └────────────────────────────┘  │
 └────────┬─────────────────────────┘
          │
 ┌────────▼─────────────────────────┐
 │ ComplianceAsCode/content         │
-│ - SSG modules, Build, Tests      │
+│ - SSG modules                    │
 └──────────────────────────────────┘
 ```
 
@@ -517,8 +459,8 @@ export CONTENT_AGENT_AI__CLAUDE_API_KEY=sk-ant-...
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/ggbecker/content-agent.git
-   cd content-agent
+   git clone https://github.com/ComplianceAsCode/content-mcp.git
+   cd content-mcp
    ```
 
 2. **Install development dependencies:**
@@ -589,15 +531,12 @@ content-agent/
 
 - Python 3.11+
 - ComplianceAsCode/content repository (local or managed)
-- For testing: podman or docker
-- For builds: CMake, standard build dependencies
 
 ## Documentation
 
 ### User Documentation
 - [Architecture](docs/architecture.md)
 - [API Reference](docs/api_reference.md)
-- [Deployment Guide](docs/deployment.md)
 - [Build Artifacts Usage](docs/BUILD_ARTIFACTS_USAGE.md) - Guide to using rendered content from builds
 
 ### ComplianceAsCode Integration
@@ -617,8 +556,10 @@ Apache License 2.0 - see LICENSE file
 
 Contributions welcome! Please see the ComplianceAsCode/content project for contribution guidelines.
 
+This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-driven development. Contributors are encouraged to use the OpenSpec workflow (`/propose`, `/apply`, `/verify`, `/archive`) when working on new features or non-trivial changes. See the [OpenSpec documentation](https://openspec.dev/) for more details. The project configuration is in `openspec/config.yaml` and past changes can be found in `openspec/changes/archive/`.
+
 ## Support
 
-- **Issues**: https://github.com/ggbecker/content-agent/issues
-- **Documentation**: https://github.com/ggbecker/content-agent/blob/main/README.md
+- **Issues**: https://github.com/ComplianceAsCode/content-mcp/issues
+- **Documentation**: https://github.com/ComplianceAsCode/content-mcp/blob/main/README.md
 - **ComplianceAsCode/content**: https://github.com/ComplianceAsCode/content

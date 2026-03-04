@@ -25,7 +25,7 @@ def example_old_way():
 
     # Initialize
     initialize_settings()
-    initialize_content_repository(Path("/home/ggasparb/workspace/github/content"))
+    initialize_content_repository(Path.home() / "workspace" / "content")
 
     rule_id = "accounts_password_pam_dcredit"
 
@@ -64,7 +64,7 @@ def example_new_way():
 
     # Initialize
     initialize_settings()
-    initialize_content_repository(Path("/home/ggasparb/workspace/github/content"))
+    initialize_content_repository(Path.home() / "workspace" / "content")
 
     rule_id = "accounts_password_pam_dcredit"
 
@@ -105,7 +105,7 @@ def example_with_product_filter():
 
     # Initialize
     initialize_settings()
-    initialize_content_repository(Path("/home/ggasparb/workspace/github/content"))
+    initialize_content_repository(Path.home() / "workspace" / "content")
 
     rule_id = "accounts_password_pam_dcredit"
 
@@ -143,7 +143,7 @@ def example_comparison():
 
     # Initialize
     initialize_settings()
-    initialize_content_repository(Path("/home/ggasparb/workspace/github/content"))
+    initialize_content_repository(Path.home() / "workspace" / "content")
 
     rule_id = "accounts_password_pam_dcredit"
     rule = discovery.get_rule_details(rule_id)
