@@ -1,13 +1,13 @@
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: Resolve inline format requirement path
 
-The tool SHALL return the parent control file path when the control file uses inline format (no `controls_dir` field) and the requirement ID exists in the `controls:` list.
+The tool SHALL accept an optional `product` parameter. It SHALL search control directories in order (global first, then product-specific if `product` is provided) and use the last matching control file (override semantics). When the resolved control file uses inline format (no `controls_dir` field) and the requirement ID exists in the `controls:` list, the tool SHALL return the control file path.
 
 The returned `RequirementFilePath` model SHALL include:
 - `control_id`: the control framework identifier
 - `requirement_id`: the requirement identifier
-- `file_path`: absolute path to the control file (e.g., `controls/anssi.yml`)
+- `file_path`: absolute path to the control file
 - `format`: `"inline"`
 - `exists`: `True`
 
@@ -16,14 +16,24 @@ The returned `RequirementFilePath` model SHALL include:
 - **WHEN** `get_requirement_file_path(control_id="anssi", requirement_id="R1")` is called and `controls/anssi.yml` exists with a `controls:` entry having `id: R1`
 - **THEN** the tool returns `RequirementFilePath` with `format="inline"`, `file_path` pointing to `controls/anssi.yml`, and `exists=True`
 
+#### Scenario: Inline requirement in product-specific directory
+
+- **WHEN** `get_requirement_file_path(control_id="custom_rhel9", requirement_id="C1", product="rhel9")` is called and `products/rhel9/controls/custom_rhel9.yml` exists with inline requirement `C1`
+- **THEN** the tool returns `RequirementFilePath` with `file_path` pointing to `products/rhel9/controls/custom_rhel9.yml`
+
 ### Requirement: Resolve directory-based requirement path
 
-The tool SHALL return the individual requirement file path when the control file has a `controls_dir` field. The resolved path SHALL be `controls/<controls_dir>/<requirement_id>.yml`.
+The tool SHALL return the individual requirement file path when the resolved control file has a `controls_dir` field. The resolved path SHALL be relative to the control file's parent directory (which may be in `controls/` or `products/<product>/controls/`).
 
 #### Scenario: Directory-based requirement file exists
 
 - **WHEN** `get_requirement_file_path(control_id="srg_gpos", requirement_id="SRG-OS-000001-GPOS-00001")` is called and `controls/srg_gpos.yml` has `controls_dir: srg_gpos` and `controls/srg_gpos/SRG-OS-000001-GPOS-00001.yml` exists
 - **THEN** the tool returns `RequirementFilePath` with `format="directory"`, `file_path` pointing to `controls/srg_gpos/SRG-OS-000001-GPOS-00001.yml`, and `exists=True`
+
+#### Scenario: Directory-based requirement in product controls
+
+- **WHEN** `get_requirement_file_path(control_id="cis_rhel9", requirement_id="1.1.1", product="rhel9")` is called and `products/rhel9/controls/cis_rhel9.yml` has `controls_dir: cis_rhel9`
+- **THEN** the tool returns `RequirementFilePath` with `file_path` pointing to `products/rhel9/controls/cis_rhel9/1.1.1.yml`
 
 #### Scenario: Directory-based requirement file does not exist
 
@@ -32,11 +42,11 @@ The tool SHALL return the individual requirement file path when the control file
 
 ### Requirement: Return None for nonexistent control
 
-The tool SHALL return `None` when the control file does not exist.
+The tool SHALL return `None` when the control file does not exist in any of the resolved directories (global and product-specific).
 
 #### Scenario: Control file not found
 
-- **WHEN** `get_requirement_file_path(control_id="nonexistent", requirement_id="R1")` is called and `controls/nonexistent.yml` does not exist
+- **WHEN** `get_requirement_file_path(control_id="nonexistent", requirement_id="R1")` is called and no `nonexistent.yml` exists in any control directory
 - **THEN** the tool returns `None`
 
 ### Requirement: Return None for nonexistent inline requirement
@@ -59,7 +69,7 @@ The `file_path` field in `RequirementFilePath` SHALL always be an absolute path.
 
 ### Requirement: MCP tool interface
 
-The tool SHALL be exposed as an MCP tool named `get_requirement_file_path` with required parameters `control_id` (string) and `requirement_id` (string). When the requirement is not found, the tool SHALL return a descriptive error message.
+The tool SHALL be exposed as an MCP tool named `get_requirement_file_path` with required parameters `control_id` (string) and `requirement_id` (string), and an optional `product` (string) parameter. When the requirement is not found, the tool SHALL return a descriptive error message.
 
 #### Scenario: MCP tool returns structured result
 

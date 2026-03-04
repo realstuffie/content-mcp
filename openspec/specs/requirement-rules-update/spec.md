@@ -1,9 +1,11 @@
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: Tool accepts control_id, requirement_id, rules, and optional status
-The `update_requirement_rules` MCP tool SHALL accept `control_id` (string, required), `requirement_id` (string, required), `rules` (array of strings, required), and `status` (string, optional, default `"automated"`).
+The `update_requirement_rules` MCP tool SHALL accept `control_id` (string, required), `requirement_id` (string, required), `rules` (array of strings, required), `status` (string, optional, default `"automated"`), and `product` (string, optional).
 
 The `status` parameter SHALL only accept the values: `automated`, `partially_automated`, `manual`, `not_applicable`, `pending`.
+
+When `product` is provided, the tool SHALL resolve the control file using product-aware discovery (searching `controls/` then `products/<product>/controls/`, with the product-specific file taking precedence).
 
 #### Scenario: Valid call with all parameters
 - **WHEN** the tool is called with `control_id="anssi"`, `requirement_id="R1"`, `rules=["rule_a", "rule_b"]`, `status="automated"`
@@ -17,8 +19,12 @@ The `status` parameter SHALL only accept the values: `automated`, `partially_aut
 - **WHEN** the tool is called without a `status` parameter
 - **THEN** the tool SHALL use `"automated"` as the default status value
 
+#### Scenario: Update product-specific control file
+- **WHEN** the tool is called with `control_id="cis_rhel9"`, `requirement_id="1.1.1"`, `rules=["rule_x"]`, `product="rhel9"` and `cis_rhel9.yml` exists in `products/rhel9/controls/`
+- **THEN** the tool SHALL update the requirement in `products/rhel9/controls/cis_rhel9.yml` (or its controls_dir subdirectory)
+
 ### Requirement: Tool locates correct file for inline format
-For control files without a `controls_dir` field, the tool SHALL locate the file at `controls/<control_id>.yml` and find the requirement block by matching `- id: <requirement_id>` within the `controls:` list.
+For control files without a `controls_dir` field, the tool SHALL locate the file using product-aware path resolution and find the requirement block by matching `- id: <requirement_id>` within the `controls:` list.
 
 #### Scenario: Inline control file exists
 - **WHEN** the tool is called with `control_id="anssi"` and `requirement_id="R1"` and `controls/anssi.yml` exists as an inline file containing requirement `R1`
@@ -29,7 +35,7 @@ For control files without a `controls_dir` field, the tool SHALL locate the file
 - **THEN** the tool SHALL return a `ControlUpdateResult` with `success=False` and an error message
 
 ### Requirement: Tool locates correct file for directory-based format
-For control files with a `controls_dir` field, the tool SHALL locate the requirement file at `controls/<controls_dir>/<requirement_id>.yml`.
+For control files with a `controls_dir` field, the tool SHALL locate the requirement file relative to the control file's parent directory (which may be in `controls/` or `products/<product>/controls/`).
 
 #### Scenario: Directory-based requirement file exists
 - **WHEN** the tool is called with `control_id="srg_gpos"` and `requirement_id="SRG-OS-000001"` and the parent file has `controls_dir: srg_gpos`
@@ -91,8 +97,8 @@ The tool SHALL return a `ControlUpdateResult` with `file_path`, `requirements_up
 - **THEN** `result.success` SHALL be `False` and `result.errors` SHALL contain a descriptive message
 
 ### Requirement: Tool registered as MCP tool
-The tool SHALL be registered in the MCP tools list in `server/handlers/tools.py` with the name `update_requirement_rules` and a handler in `handle_tool_call`.
+The tool SHALL be registered in the MCP tools list in `server/handlers/tools.py` with the name `update_requirement_rules` and a handler in `handle_tool_call`. The tool schema SHALL include an optional `product` string parameter.
 
 #### Scenario: Tool appears in tool listing
 - **WHEN** the MCP server lists available tools
-- **THEN** `update_requirement_rules` SHALL be present with its input schema
+- **THEN** `update_requirement_rules` SHALL be present with its input schema including the `product` parameter

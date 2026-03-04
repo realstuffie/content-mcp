@@ -1,8 +1,8 @@
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: Return requirement counts for a control file
 
-The `get_control_stats` MCP tool SHALL accept a `control_id` string parameter and return a `ControlStats` object containing:
+The `get_control_stats` MCP tool SHALL accept a `control_id` string parameter and an optional `product` string parameter, and return a `ControlStats` object containing:
 - `control_id`: the control framework identifier
 - `title`: the control framework title
 - `total`: total number of requirements
@@ -11,6 +11,8 @@ The `get_control_stats` MCP tool SHALL accept a `control_id` string parameter an
 - `unmapped`: count of requirements with an empty rules list
 
 The `ControlStats` model SHALL be a Pydantic v2 `BaseModel` defined in `models/control.py`.
+
+When `product` is provided, the tool SHALL resolve the control file using product-aware discovery (global + product-specific directories with override semantics).
 
 #### Scenario: Control with mixed statuses
 
@@ -32,9 +34,14 @@ The `ControlStats` model SHALL be a Pydantic v2 `BaseModel` defined in `models/c
 - **WHEN** `get_control_stats` is called and no requirement has any rules
 - **THEN** `unmapped` SHALL equal `total` and `mapped` SHALL equal `0`
 
+#### Scenario: Stats for product-specific control
+
+- **WHEN** `get_control_stats(control_id="cis_rhel9", product="rhel9")` is called and `cis_rhel9.yml` exists in `products/rhel9/controls/`
+- **THEN** the stats SHALL be computed from the product-specific control file
+
 ### Requirement: Handle nonexistent control
 
-The tool SHALL return an error message when the requested `control_id` does not correspond to any known control file.
+The tool SHALL return an error message when the requested `control_id` does not correspond to any known control file in the resolved directories (global and product-specific if `product` is provided).
 
 #### Scenario: Unknown control ID
 

@@ -1,11 +1,13 @@
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: Build cross-framework control rule index
-The system SHALL provide a `get_control_rule_index` MCP tool that builds a complete index of all requirements and their rule mappings across all control frameworks. The tool SHALL accept an optional `include_unmapped` boolean (default `true`) and an optional `control_ids` string list to filter which frameworks to index. The result SHALL include `total_controls`, `total_requirements`, `total_mapped_rules` counts and a list of `IndexedRequirement` objects.
+The system SHALL provide a `get_control_rule_index` MCP tool that builds a complete index of all requirements and their rule mappings across all control frameworks. The tool SHALL accept an optional `include_unmapped` boolean (default `true`), an optional `control_ids` string list to filter which frameworks to index, and an optional `product` string to scope discovery to a specific product's controls. The result SHALL include `total_controls`, `total_requirements`, `total_mapped_rules` counts and a list of `IndexedRequirement` objects.
+
+When `product` is provided, the tool SHALL use product-aware discovery to resolve control files (global + product-specific directories with override semantics).
 
 #### Scenario: Index all control frameworks
 - **WHEN** `get_control_rule_index` is called with no arguments
-- **THEN** the system returns a `ControlRuleIndex` with all control frameworks indexed, including requirements with and without rule mappings
+- **THEN** the system returns a `ControlRuleIndex` with all control frameworks indexed (from global and all product directories), including requirements with and without rule mappings
 
 #### Scenario: Filter by specific control IDs
 - **WHEN** `get_control_rule_index` is called with `control_ids: ["anssi", "cis_rhel9"]`
@@ -18,6 +20,10 @@ The system SHALL provide a `get_control_rule_index` MCP tool that builds a compl
 #### Scenario: Control framework not found
 - **WHEN** `get_control_rule_index` is called with `control_ids: ["nonexistent"]`
 - **THEN** the system returns a `ControlRuleIndex` with `total_controls: 0`, `total_requirements: 0`, and an empty requirements list
+
+#### Scenario: Index scoped to product
+- **WHEN** `get_control_rule_index` is called with `product: "rhel9"` and `products/rhel9/controls/` contains product-specific controls
+- **THEN** the system returns a `ControlRuleIndex` built from global controls plus rhel9 product-specific controls, with override semantics applied
 
 ### Requirement: Flatten nested control structures
 The system SHALL recursively flatten nested control structures when building the index. Control files that contain controls with nested sub-controls SHALL have all leaf requirements included in the index with their parent control framework ID preserved.

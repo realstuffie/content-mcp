@@ -1,7 +1,9 @@
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: Find similar requirements across frameworks
-The system SHALL provide a `find_similar_requirements` MCP tool that finds requirements with similar text across all control frameworks using Jaccard text similarity. The tool SHALL accept `requirement_text` (str, required), `min_similarity` (float, default 0.2), `max_results` (int, default 20), and `exclude_control_id` (str, optional). Results SHALL be sorted by similarity score descending.
+The system SHALL provide a `find_similar_requirements` MCP tool that finds requirements with similar text across all control frameworks using Jaccard text similarity. The tool SHALL accept `requirement_text` (str, required), `min_similarity` (float, default 0.2), `max_results` (int, default 20), `exclude_control_id` (str, optional), and `product` (str, optional). Results SHALL be sorted by similarity score descending.
+
+When `product` is provided, the tool SHALL use product-aware discovery to build the index (global + product-specific directories with override semantics).
 
 #### Scenario: Find similar requirements for a password policy text
 - **WHEN** `find_similar_requirements` is called with `requirement_text: "The system must enforce password complexity requirements"`
@@ -22,6 +24,10 @@ The system SHALL provide a `find_similar_requirements` MCP tool that finds requi
 #### Scenario: No matches found
 - **WHEN** `find_similar_requirements` is called with text that has no similarity to any requirement
 - **THEN** the system returns an empty list
+
+#### Scenario: Similarity search scoped to product
+- **WHEN** `find_similar_requirements` is called with `product: "rhel9"`
+- **THEN** the search SHALL include controls from global and `products/rhel9/controls/` (with override semantics), but not controls from other products
 
 ### Requirement: Tokenization for similarity
 The system SHALL tokenize text by lowercasing, removing non-alphanumeric characters (keeping spaces), splitting on whitespace, removing stopwords (including compliance-domain stopwords: "ensure", "operating", "system", "information"), and filtering tokens shorter than 3 characters.

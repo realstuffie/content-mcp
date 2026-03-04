@@ -1,13 +1,18 @@
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: Filter by pending status by default
 
-The tool SHALL return requirements with `status` matching the filter, defaulting to `["pending"]` when no `status_filter` is provided.
+The tool SHALL accept an optional `product` parameter. It SHALL resolve the control file using product-aware discovery (global + product-specific directories with override semantics) when `product` is provided. The tool SHALL return requirements with `status` matching the filter, defaulting to `["pending"]` when no `status_filter` is provided.
 
 #### Scenario: Default pending filter
 
 - **WHEN** `list_unmapped_requirements(control_id="test")` is called without `status_filter` and the control has requirements with statuses "pending", "automated", and "manual"
 - **THEN** only requirements with `status="pending"` are returned
+
+#### Scenario: Unmapped requirements from product-specific control
+
+- **WHEN** `list_unmapped_requirements(control_id="cis_rhel9", product="rhel9")` is called and `cis_rhel9.yml` exists in `products/rhel9/controls/`
+- **THEN** the unmapped requirements SHALL be computed from the product-specific control file
 
 ### Requirement: Include empty-rules requirements
 
@@ -29,7 +34,7 @@ The tool SHALL accept an optional `status_filter` parameter to override the defa
 
 ### Requirement: Return None for nonexistent control
 
-The tool SHALL return `None` when the control file does not exist.
+The tool SHALL return `None` when the control file does not exist in any of the resolved directories.
 
 #### Scenario: Control not found
 
@@ -56,7 +61,7 @@ The tool SHALL truncate requirement descriptions to 300 characters, consistent w
 
 ### Requirement: MCP tool interface
 
-The tool SHALL be exposed as an MCP tool named `list_unmapped_requirements` with required parameter `control_id` (string) and optional parameter `status_filter` (array of strings).
+The tool SHALL be exposed as an MCP tool named `list_unmapped_requirements` with required parameter `control_id` (string), optional parameter `status_filter` (array of strings), and optional parameter `product` (string).
 
 #### Scenario: MCP tool returns results
 
