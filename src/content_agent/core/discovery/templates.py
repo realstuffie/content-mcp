@@ -88,6 +88,7 @@ class TemplateDiscovery:
             description=description,
             parameters=parameters,
             example_usage=self._get_example_usage(template_dir),
+            documentation=self._get_template_documentation(template_name),
         )
 
         logger.debug(f"Loaded schema for template {template_name}")
@@ -207,6 +208,52 @@ class TemplateDiscovery:
                 description="Template-specific parameter",
             )
         ]
+
+    def _get_template_documentation(self, template_name: str) -> str | None:
+        """Extract template documentation from template_reference.md.
+
+        Finds the section headed by `#### <template_name>` and returns all content
+        until the next `####` heading or end of file.
+
+        Args:
+            template_name: Template name to look up
+
+        Returns:
+            Documentation text or None if not found
+        """
+        ref_file = self.content_repo.path / "docs" / "templates" / "template_reference.md"
+        if not ref_file.exists():
+            logger.debug(f"Template reference file not found: {ref_file}")
+            return None
+
+        try:
+            content = ref_file.read_text()
+        except Exception as e:
+            logger.warning(f"Failed to read template reference file: {e}")
+            return None
+
+        heading = f"#### {template_name}"
+        lines = content.split("\n")
+        start_idx = None
+
+        for i, line in enumerate(lines):
+            if line.strip() == heading:
+                start_idx = i + 1
+                break
+
+        if start_idx is None:
+            return None
+
+        # Collect lines until next #### heading or end of file
+        section_lines = []
+        for i in range(start_idx, len(lines)):
+            if lines[i].strip().startswith("####"):
+                break
+            section_lines.append(lines[i])
+
+        # Strip leading/trailing blank lines
+        text = "\n".join(section_lines).strip()
+        return text if text else None
 
     def _get_example_usage(self, template_dir: Path) -> dict | None:
         """Get example usage for template.

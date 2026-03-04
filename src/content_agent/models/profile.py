@@ -108,6 +108,9 @@ class TemplateSchema(BaseModel):
         default_factory=list, description="Template parameters"
     )
     example_usage: dict[str, str] | None = Field(None, description="Example parameter values")
+    documentation: str | None = Field(
+        None, description="Template reference documentation from template_reference.md"
+    )
 
     class Config:
         """Pydantic config."""
