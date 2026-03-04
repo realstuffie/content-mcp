@@ -72,6 +72,28 @@ URI: cac://controls
 Returns: JSON array of control framework names
 ```
 
+### Build Artifacts
+
+**List built products**
+```
+URI: cac://build
+Returns: JSON object with products array and count
+```
+
+**Get product build info**
+```
+URI: cac://build/{product}
+Example: cac://build/rhel9
+Returns: DatastreamInfo object
+```
+
+**Get rendered rule**
+```
+URI: cac://build/{product}/rules/{rule_id}
+Example: cac://build/rhel9/rules/sshd_set_idle_timeout
+Returns: RenderedRule object (fully rendered after Jinja processing)
+```
+
 ## MCP Tools
 
 Tools are invokable actions that perform operations.
@@ -382,6 +404,8 @@ Get AI-suggested rule mappings for a control requirement. Requires Claude API ke
 - `requirement_id` (string, optional): Requirement ID
 - `max_suggestions` (integer, optional): Maximum number of suggestions (default: 10)
 - `min_confidence` (number, optional): Minimum confidence score 0.0–1.0 (default: 0.3)
+- `cross_reference` (boolean, optional): Include cross-framework evidence from similar requirements in other control files (default: false)
+- `target_product` (string, optional): Prioritize rules with identifiers for this product (e.g., "rhel9")
 
 **Returns:** Array of RuleSuggestion objects
 
@@ -452,6 +476,37 @@ Search within control files for specific requirements.
 - `control_id` (string, optional): Control framework to search within
 
 **Returns:** Array of ControlRequirement objects
+
+#### get_control_rule_index
+
+Build a complete index of all requirements and rule mappings across all control frameworks. Useful for cross-framework rule discovery.
+
+**Parameters:**
+- `include_unmapped` (boolean, optional): Include requirements without rule mappings (default: true)
+- `control_ids` (array of strings, optional): List of control framework IDs to index (default: all)
+
+**Returns:** ControlRuleIndex object
+
+#### find_similar_requirements
+
+Find requirements with similar text across all control frameworks using text similarity. Useful for discovering how different frameworks address the same security concern.
+
+**Parameters:**
+- `requirement_text` (string, required): Requirement text to search for similar requirements
+- `min_similarity` (number, optional): Minimum similarity score 0.0–1.0 (default: 0.2)
+- `max_results` (integer, optional): Maximum number of results (default: 20)
+- `exclude_control_id` (string, optional): Control framework to exclude from results
+
+**Returns:** Array of SimilarRequirement objects
+
+#### get_rule_product_availability
+
+Check which products include a given rule, via identifiers, profile selections, and build artifacts. Useful for cross-product compliance analysis.
+
+**Parameters:**
+- `rule_id` (string, required): Rule identifier
+
+**Returns:** RuleProductAvailability object
 
 ## Data Models
 
@@ -644,6 +699,58 @@ Search within control files for specific requirements.
   by_status: Record<string, number>;
   mapped: number;
   unmapped: number;
+}
+```
+
+### IndexedRequirement
+
+```typescript
+{
+  control_id: string;
+  requirement_id: string;
+  title: string;
+  description: string;
+  rules: string[];
+  status: string;
+  levels: string[];
+}
+```
+
+### ControlRuleIndex
+
+```typescript
+{
+  total_controls: number;
+  total_requirements: number;
+  total_mapped_rules: number;
+  requirements: IndexedRequirement[];
+}
+```
+
+### SimilarRequirement
+
+```typescript
+{
+  control_id: string;
+  requirement_id: string;
+  title: string;
+  description: string;
+  rules: string[];
+  similarity_score: number;
+  matching_terms: string[];
+}
+```
+
+### RuleProductAvailability
+
+```typescript
+{
+  rule_id: string;
+  products_with_identifiers: string[];
+  products_in_profiles: Record<string, string[]>;
+  platforms: string[];
+  template?: Record<string, any>;
+  has_build_artifacts: Record<string, boolean>;
 }
 ```
 
