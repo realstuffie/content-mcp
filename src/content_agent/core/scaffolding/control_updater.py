@@ -239,8 +239,8 @@ class ControlUpdater:
             line = block_lines[i]
             stripped = line.lstrip()
 
-            # Detect `rules:` field
-            if stripped.startswith("rules:"):
+            # Detect `rules:` field (exact key, not rules_*)
+            if stripped.rstrip() == "rules:" or stripped.startswith("rules: "):
                 found_rules = True
                 result.extend(self._format_rules_block(rules, prop_indent))
                 i += 1
@@ -259,8 +259,8 @@ class ControlUpdater:
                         break
                 continue
 
-            # Detect `status:` field
-            if stripped.startswith("status:"):
+            # Detect `status:` field (exact key, not status_justification etc.)
+            if stripped.rstrip() == "status:" or stripped.startswith("status: "):
                 found_status = True
                 result.append(f"{prop_indent}status: {status}\n")
                 i += 1

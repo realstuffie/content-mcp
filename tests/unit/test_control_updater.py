@@ -446,6 +446,35 @@ class TestEdgeCases:
 
         assert result.success
 
+    def test_status_justification_not_clobbered(
+        self, updater: ControlUpdater, tmp_path: Path
+    ) -> None:
+        _write_inline_control(
+            tmp_path,
+            "test",
+            """\
+            ---
+            id: test
+            title: Test
+            controls:
+                - id: R1
+                  title: First
+                  status: pending
+                  status_justification: Needs review by security team
+                  rules:
+                      - old_rule
+            """,
+        )
+
+        result = updater.update_requirement_rules("test", "R1", ["new_rule"], "automated")
+
+        assert result.success
+        content = (tmp_path / "controls" / "test.yml").read_text()
+        assert "status: automated" in content
+        assert "status_justification: Needs review by security team" in content
+        assert "new_rule" in content
+        assert "old_rule" not in content
+
     def test_result_model_fields(self, updater: ControlUpdater, tmp_path: Path) -> None:
         _write_inline_control(
             tmp_path,
