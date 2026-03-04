@@ -10,6 +10,7 @@ from content_agent.models.control import (
     ControlFile,
     ControlRequirement,
     ControlRuleIndex,
+    ControlStats,
     IndexedRequirement,
     SimilarRequirement,
 )
@@ -241,6 +242,44 @@ class ControlDiscovery:
             f"{index.total_mapped_rules} mapped rules"
         )
         return index
+
+    def get_control_stats(self, control_id: str) -> ControlStats | None:
+        """Compute aggregate requirement statistics for a control file.
+
+        Args:
+            control_id: Control framework identifier
+
+        Returns:
+            ControlStats with counts, or None if control not found
+        """
+        logger.debug(f"Computing stats for control: {control_id}")
+
+        control = self.get_control_details(control_id)
+        if control is None:
+            return None
+
+        flat = self._flatten_controls(control.controls)
+
+        by_status: dict[str, int] = {}
+        mapped = 0
+        unmapped = 0
+
+        for req in flat:
+            status = req.status
+            by_status[status] = by_status.get(status, 0) + 1
+            if req.rules:
+                mapped += 1
+            else:
+                unmapped += 1
+
+        return ControlStats(
+            control_id=control.id,
+            title=control.title,
+            total=len(flat),
+            by_status=by_status,
+            mapped=mapped,
+            unmapped=unmapped,
+        )
 
     # Stopwords for compliance document similarity
     _STOPWORDS = frozenset(
@@ -483,6 +522,19 @@ def get_control_rule_index(
     """
     discovery = ControlDiscovery()
     return discovery.get_control_rule_index(include_unmapped, control_ids)
+
+
+def get_control_stats(control_id: str) -> ControlStats | None:
+    """Compute aggregate requirement statistics for a control file.
+
+    Args:
+        control_id: Control framework identifier
+
+    Returns:
+        ControlStats with counts, or None if not found
+    """
+    discovery = ControlDiscovery()
+    return discovery.get_control_stats(control_id)
 
 
 def find_similar_requirements(

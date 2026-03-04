@@ -456,6 +456,20 @@ TOOLS = [
         },
     },
     {
+        "name": "get_control_stats",
+        "description": "Get aggregate requirement statistics for a control file (total, by-status, mapped/unmapped counts). Use this instead of counting requirements manually.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "control_id": {
+                    "type": "string",
+                    "description": "Control framework identifier",
+                },
+            },
+            "required": ["control_id"],
+        },
+    },
+    {
         "name": "get_control_rule_index",
         "description": "Build a complete index of all requirements and rule mappings across all control frameworks. Useful for cross-framework rule discovery.",
         "inputSchema": {
@@ -959,6 +973,28 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
                 {
                     "type": "text",
                     "text": summary + json.dumps(control.model_dump(mode="json"), indent=2),
+                }
+            ]
+
+        elif name == "get_control_stats":
+            from content_agent.core.discovery.controls import get_control_stats
+
+            control_id = arguments["control_id"]
+            stats = get_control_stats(control_id)
+
+            if not stats:
+                return [{"type": "text", "text": f"Control not found: {control_id}"}]
+
+            summary = (
+                f"Control: {stats.title}\n"
+                f"Total requirements: {stats.total}\n"
+                f"Mapped: {stats.mapped}, Unmapped: {stats.unmapped}\n\n"
+            )
+
+            return [
+                {
+                    "type": "text",
+                    "text": summary + json.dumps(stats.model_dump(mode="json"), indent=2),
                 }
             ]
 

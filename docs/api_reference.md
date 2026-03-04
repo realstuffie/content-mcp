@@ -434,6 +434,15 @@ Get detailed information about a control framework.
 
 **Returns:** ControlFile object with full requirements list
 
+#### get_control_stats
+
+Get aggregate requirement statistics for a control file. Returns pre-computed counts by status and mapped/unmapped tallies, avoiding unreliable manual counting.
+
+**Parameters:**
+- `control_id` (string, required): Control framework identifier
+
+**Returns:** ControlStats object with total, by_status, mapped, and unmapped counts
+
 #### search_control_requirements
 
 Search within control files for specific requirements.
@@ -622,6 +631,19 @@ Search within control files for specific requirements.
   notes?: string;
   levels: string[];
   section?: string;
+}
+```
+
+### ControlStats
+
+```typescript
+{
+  control_id: string;
+  title: string;
+  total: number;
+  by_status: Record<string, number>;
+  mapped: number;
+  unmapped: number;
 }
 ```
 

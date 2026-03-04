@@ -331,6 +331,20 @@ class SimilarRequirement(BaseModel):
     matching_terms: list[str] = Field(default_factory=list, description="Overlapping keywords")
 
 
+class ControlStats(BaseModel):
+    """Aggregate statistics for a control file's requirements."""
+
+    control_id: str = Field(..., description="Control framework identifier")
+    title: str = Field(..., description="Control framework title")
+    total: int = Field(..., description="Total number of requirements")
+    by_status: dict[str, int] = Field(
+        default_factory=dict,
+        description="Requirement counts keyed by status",
+    )
+    mapped: int = Field(..., description="Requirements with at least one rule")
+    unmapped: int = Field(..., description="Requirements with no rules")
+
+
 class ControlUpdateResult(BaseModel):
     """Result of updating an existing control file."""
 
