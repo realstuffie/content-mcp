@@ -235,7 +235,7 @@ export CONTENT_AGENT_AI__ENABLED=true
 export CONTENT_AGENT_AI__CLAUDE_API_KEY=sk-ant-...
 
 # Optional: Customize AI behavior
-export CONTENT_AGENT_AI__MODEL=claude-3-5-sonnet-20241022
+export CONTENT_AGENT_AI__MODEL=claude-sonnet-5-5
 export CONTENT_AGENT_AI__MAX_TOKENS=4096
 export CONTENT_AGENT_AI__TEMPERATURE=0.0
 ```

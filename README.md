@@ -190,7 +190,7 @@ CONTENT_AGENT_CONTENT__BRANCH=main
 # AI settings (for control file generation features)
 CONTENT_AGENT_AI__ENABLED=true
 CONTENT_AGENT_AI__CLAUDE_API_KEY=your_api_key_here
-CONTENT_AGENT_AI__MODEL=claude-3-5-sonnet-20241022
+CONTENT_AGENT_AI__MODEL=claude-sonnet-5-5
 CONTENT_AGENT_AI__MAX_TOKENS=4096
 CONTENT_AGENT_AI__TEMPERATURE=0.0
 ```
@@ -207,7 +207,7 @@ content:
 ai:
   enabled: true
   claude_api_key: your_api_key_here
-  model: claude-3-5-sonnet-20241022
+  model: claude-sonnet-5-5
   max_tokens: 4096
   temperature: 0.0
 ```

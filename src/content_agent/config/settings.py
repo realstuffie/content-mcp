@@ -120,7 +120,7 @@ class AISettings(BaseSettings):
         description="Claude API key for AI-powered features",
     )
     model: str = Field(
-        default="claude-3-5-sonnet-20241022",
+        default="claude-sonnet-5-5",
         description="Claude model to use",
     )
     max_tokens: int = Field(
