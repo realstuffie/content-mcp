@@ -14,6 +14,7 @@ from content_agent.models.control import (
     IndexedRequirement,
     RequirementFilePath,
     SimilarRequirement,
+    flatten_requirements,
 )
 
 logger = logging.getLogger(__name__)
@@ -260,7 +261,7 @@ class ControlDiscovery:
         query_lower = query.lower()
 
         for control in controls_to_search:
-            for req in control.controls:
+            for req in flatten_requirements(control.controls):
                 # Search in title and description
                 if (
                     query_lower in req.title.lower()
@@ -279,12 +280,9 @@ class ControlDiscovery:
             controls: List of control requirements (may contain nested controls)
 
         Returns:
-            Flat list of all leaf-level requirements
+            Flat list of all requirements at every depth, parents before children
         """
-        flat: list[ControlRequirement] = []
-        for ctrl in controls:
-            flat.append(ctrl)
-        return flat
+        return flatten_requirements(controls)
 
     def get_control_rule_index(
         self,
@@ -605,9 +603,13 @@ class ControlDiscovery:
                 exists=req_file.exists(),
             )
 
-        # Inline format: requirement must exist in the controls list
-        for req in data.get("controls", []):
-            if isinstance(req, dict) and req.get("id") == requirement_id:
+        # Inline format: requirement must exist in the controls tree, at any depth
+        pending = list(data.get("controls") or [])
+        while pending:
+            req = pending.pop()
+            if not isinstance(req, dict):
+                continue
+            if req.get("id") == requirement_id:
                 return RequirementFilePath(
                     control_id=control_id,
                     requirement_id=requirement_id,
@@ -615,6 +617,7 @@ class ControlDiscovery:
                     format="inline",
                     exists=True,
                 )
+            pending.extend(req.get("controls") or [])
 
         logger.debug(f"Requirement {requirement_id} not found in {control_id}")
         return None

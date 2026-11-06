@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ControlRequirement(BaseModel):
@@ -61,6 +61,50 @@ class ControlRequirement(BaseModel):
         default=None,
         description="Section identifier this requirement belongs to",
     )
+    controls: list["ControlRequirement"] = Field(
+        default_factory=list,
+        description="Nested child requirements",
+    )
+    referenced_controls: list[str] = Field(
+        default_factory=list,
+        description="References to requirements in other control files "
+        "(e.g., 'nist_800_53:ac-2', 'cis_ocp:all:level_2')",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _split_control_references(cls, data: Any) -> Any:
+        """Move string entries of `controls` into `referenced_controls`.
+
+        In ComplianceAsCode control files a requirement's `controls` list can hold
+        nested requirements or references to requirements of other control files.
+        """
+        if isinstance(data, dict) and isinstance(data.get("controls"), list):
+            children = data["controls"]
+            refs = [child for child in children if isinstance(child, str)]
+            if refs:
+                data = {
+                    **data,
+                    "controls": [child for child in children if not isinstance(child, str)],
+                    "referenced_controls": [*data.get("referenced_controls", []), *refs],
+                }
+        return data
+
+
+def flatten_requirements(controls: list[ControlRequirement]) -> list[ControlRequirement]:
+    """Return every requirement in a control tree, parents before their children.
+
+    Args:
+        controls: Top-level requirements, which may contain nested requirements
+
+    Returns:
+        Flat list of all requirements at every depth
+    """
+    flat: list[ControlRequirement] = []
+    for ctrl in controls:
+        flat.append(ctrl)
+        flat.extend(flatten_requirements(ctrl.controls))
+    return flat
 
 
 class ControlLevel(BaseModel):

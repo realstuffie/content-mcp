@@ -1082,6 +1082,7 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
 
         elif name == "get_control_details":
             from content_agent.core.discovery.controls import get_control_details
+            from content_agent.models.control import flatten_requirements
 
             control_id = arguments["control_id"]
             product = arguments.get("product")
@@ -1091,7 +1092,7 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
                 return [{"type": "text", "text": f"Control not found: {control_id}"}]
 
             summary = f"Control framework: {control.title}\n"
-            summary += f"Requirements: {len(control.controls)}\n"
+            summary += f"Requirements: {len(flatten_requirements(control.controls))}\n"
             if control.parse_errors:
                 warnings = "\n".join(f"- {e}" for e in control.parse_errors)
                 summary += f"\nWARNING: {len(control.parse_errors)} requirement(s) failed to parse:\n{warnings}\n"

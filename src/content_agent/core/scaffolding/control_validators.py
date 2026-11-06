@@ -6,7 +6,11 @@ from pathlib import Path
 import yaml
 
 from content_agent.core.discovery.rules import RuleDiscovery
-from content_agent.models.control import ControlFile, ControlValidationResult
+from content_agent.models.control import (
+    ControlFile,
+    ControlValidationResult,
+    flatten_requirements,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -194,7 +198,7 @@ class ControlValidator:
                 available_rules = []
 
         # Check all rule references in controls
-        for control_req in control.controls:
+        for control_req in flatten_requirements(control.controls):
             # Check rules
             for rule_id in control_req.rules:
                 if rule_id not in available_rules:

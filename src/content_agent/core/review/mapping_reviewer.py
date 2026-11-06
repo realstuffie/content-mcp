@@ -10,6 +10,7 @@ from content_agent.models.control import (
     ControlReviewReport,
     ControlValidationResult,
     RuleSuggestion,
+    flatten_requirements,
 )
 
 logger = logging.getLogger(__name__)
@@ -71,13 +72,14 @@ class MappingReviewer:
             validation_result = self.validator.validate_control_file(control_file_path)
 
             # Count requirements with/without rules
-            requirements_with_rules = sum(1 for req in control.controls if req.rules)
-            requirements_without_rules = len(control.controls) - requirements_with_rules
+            all_requirements = flatten_requirements(control.controls)
+            requirements_with_rules = sum(1 for req in all_requirements if req.rules)
+            requirements_without_rules = len(all_requirements) - requirements_with_rules
 
             # Generate AI suggestions if requested and mapper available
             rule_suggestions = {}
             if generate_suggestions and self.rule_mapper:
-                for req in control.controls:
+                for req in all_requirements:
                     if not req.rules:  # Only suggest for unmapped requirements
                         try:
                             suggestions = self.rule_mapper.suggest_rules(req)
@@ -103,7 +105,7 @@ class MappingReviewer:
 
             return ControlReviewReport(
                 policy_id=control.id,
-                total_requirements=len(control.controls),
+                total_requirements=len(all_requirements),
                 requirements_with_rules=requirements_with_rules,
                 requirements_without_rules=requirements_without_rules,
                 validation_result=validation_result,
