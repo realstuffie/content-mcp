@@ -1,5 +1,6 @@
 """Claude API client for AI operations."""
 
+import inspect
 import json
 from typing import Any
 
@@ -9,6 +10,18 @@ try:
     ANTHROPIC_AVAILABLE = True
 except ImportError:
     ANTHROPIC_AVAILABLE = False
+
+
+def _accepts_temperature(create: Any) -> bool:
+    """Return whether messages.create() takes a temperature argument.
+
+    anthropic SDK 2.x removed temperature from messages.create(), and passing it
+    raises TypeError. Earlier versions accept it.
+    """
+    try:
+        return "temperature" in inspect.signature(create).parameters
+    except (TypeError, ValueError):
+        return True
 
 
 class ClaudeAPIError(Exception):
@@ -59,7 +72,8 @@ class ClaudeClient:
         Args:
             system_prompt: System prompt defining behavior
             user_prompt: User prompt with task
-            temperature: Override default temperature
+            temperature: Override default temperature. Ignored with anthropic
+                SDK 2.x, which has no temperature parameter.
 
         Returns:
             Response text from Claude
@@ -68,18 +82,24 @@ class ClaudeClient:
             ClaudeAPIError: If API request fails
         """
         try:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=self.max_tokens,
-                temperature=temperature if temperature is not None else self.temperature,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_prompt}],
-            )
+            request: dict[str, Any] = {
+                "model": self.model,
+                "max_tokens": self.max_tokens,
+                "system": system_prompt,
+                "messages": [{"role": "user", "content": user_prompt}],
+            }
+            if _accepts_temperature(self.client.messages.create):
+                request["temperature"] = (
+                    temperature if temperature is not None else self.temperature
+                )
+            response = self.client.messages.create(**request)
 
             # Extract text from response
             content = response.content
             if isinstance(content, list) and len(content) > 0:
-                return content[0].text  # type: ignore[union-attr]
+                text = getattr(content[0], "text", None)
+                if isinstance(text, str):
+                    return text
             return str(content)
 
         except Exception as e:

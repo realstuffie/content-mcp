@@ -131,7 +131,10 @@ class AISettings(BaseSettings):
     )
     temperature: float = Field(
         default=0.0,
-        description="Temperature for AI generation (0.0 = deterministic)",
+        description=(
+            "Temperature for AI generation (0.0 = deterministic). Not sent with "
+            "anthropic SDK 2.x, which has no temperature parameter."
+        ),
         ge=0.0,
         le=1.0,
     )
