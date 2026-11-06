@@ -82,6 +82,9 @@ addopts = [
     "--cov-report=term-missing",
 ]
 asyncio_mode = "auto"
+markers = [
+    "integration: tests that need real input files, such as a policy document fixture",
+]
 
 [tool.black]
 line-length = 100
