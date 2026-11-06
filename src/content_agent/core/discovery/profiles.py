@@ -174,8 +174,8 @@ class ProfileDiscovery:
         for line in lines:
             line = line.rstrip()
 
-            # Skip comments and empty lines
-            if not line or line.startswith("#"):
+            # Skip comments (including indented ones) and empty lines
+            if not line or line.lstrip().startswith("#"):
                 continue
 
             # Parse key-value pairs
@@ -201,9 +201,13 @@ class ProfileDiscovery:
                 else:
                     current_section = None
             elif current_section == "selections":
+                # Jinja blocks ({{% if ... %}}) can't be evaluated here, so keep
+                # the selections of every branch instead of ending the section
+                if line.lstrip().startswith("{{%"):
+                    continue
                 # Selection line (starts with -)
                 if line.strip().startswith("-"):
-                    selection = line.strip()[1:].strip()
+                    selection = line.strip()[1:].split("#", 1)[0].strip().strip("'\"")
                     # Handle !unselect
                     if selection.startswith("!unselect"):
                         continue
