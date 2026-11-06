@@ -10,6 +10,7 @@ See docs/COMPLIANCEASCODE_REFERENCE.md for more details.
 """
 
 import logging
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,12 @@ from content_agent.models import (
 
 logger = logging.getLogger(__name__)
 
+# Jinja2 variables for expanding a rule without a product: product conditionals
+# are false. If that fails, a second try keeps {{{ full_name }}} as literal text,
+# because an empty full_name at the start of a line breaks YAML indentation.
+GENERIC_SUBSTITUTIONS: dict[str, Any] = {"product": ""}
+FULL_NAME_PLACEHOLDER: dict[str, Any] = {"product": "", "full_name": "{{{ full_name }}}"}
+
 
 class RuleDiscovery:
     """Rule discovery and information retrieval."""
@@ -39,6 +46,37 @@ class RuleDiscovery:
         self.content_repo = get_content_repository()
         self._rule_cache: dict[str, Path] | None = None
         self._profile_rule_index: dict[str, list[tuple[str, str]]] | None = None
+        self._product_env_cache: dict[str, dict[str, Any] | None] = {}
+
+    def _product_substitutions(self, product: str) -> dict[str, Any] | None:
+        """Return the Jinja2 variables the build uses for a product.
+
+        Like ssg.environment.open_environment(), this is the product's product.yml
+        plus the product_properties directory, which together define variables
+        such as full_name, auid and audisp_conf_path. Returns None when the product
+        can't be loaded.
+        """
+        if product not in self._product_env_cache:
+            repo_path = self.content_repo.path
+            product_yaml = repo_path / "products" / product / "product.yml"
+            env: dict[str, Any] | None = None
+            try:
+                loaded = get_ssg_modules().products.load_product_yaml(str(product_yaml))
+                properties_dir = repo_path / "product_properties"
+                if properties_dir.is_dir():
+                    loaded.read_properties_from_directory(str(properties_dir))
+                env = dict(loaded)
+            except Exception as e:
+                logger.debug(f"Could not load the environment of product {product}: {e}")
+            self._product_env_cache[product] = env
+        cached = self._product_env_cache[product]
+        return dict(cached) if cached is not None else None
+
+    def _all_product_ids(self) -> list[str]:
+        products_dir = self.content_repo.path / "products"
+        if not products_dir.is_dir():
+            return []
+        return sorted(p.name for p in products_dir.iterdir() if (p / "product.yml").is_file())
 
     def _load_rule_yaml(self, rule_path: Path, product: str | None = None) -> dict:
         """Load and parse a rule.yml file, expanding Jinja2 templates.
@@ -49,22 +87,56 @@ class RuleDiscovery:
         Args:
             rule_path: Path to rule.yml
             product: Optional product ID for product-specific expansion.
-                When provided, conditionals like {{% if product == "rhel9" %}}
-                are evaluated correctly. When None, all conditionals evaluate
-                to false (generic fallback).
+                When provided, the rule is expanded with that product's variables,
+                as in the build. When None, the rule is expanded with an empty
+                product name, so product conditionals are false.
+
+        When expansion fails, the file is loaded as plain YAML. Without a product,
+        two more expansions are tried before giving up: one that keeps
+        ``{{{ full_name }}}`` as literal text, and then the variables of the first
+        product that works.
         """
-        substitutions = {"product": product} if product else {}
+        if product:
+            substitutions = self._product_substitutions(product) or {"product": product}
+        else:
+            substitutions = dict(GENERIC_SUBSTITUTIONS)
         try:
             ssg_yaml = get_ssg_modules().yaml
             return ssg_yaml.open_and_expand(str(rule_path), substitutions)  # type: ignore[no-any-return]
         except Exception as e:
-            # Fallback to direct YAML loading if ssg expansion fails
-            logger.warning(
-                f"SSG Jinja2 expansion failed for {rule_path}, "
-                f"falling back to direct YAML loading: {e}"
-            )
+            expansion_error = e
+
+        # Fallback to direct YAML loading if ssg expansion fails
+        logger.warning(
+            f"SSG Jinja2 expansion failed for {rule_path}, "
+            f"falling back to direct YAML loading: {expansion_error}"
+        )
+        try:
             with open(rule_path) as f:
                 return yaml.load(f.read(), Loader=yaml.FullLoader)  # type: ignore[no-any-return]
+        except yaml.YAMLError:
+            if product:
+                raise
+
+        # Without a product, the remaining failures are rules whose Jinja needs
+        # product variables, such as full_name at the start of a line, or auid
+        def attempts() -> Iterator[dict[str, Any]]:
+            yield dict(FULL_NAME_PLACEHOLDER)
+            for fallback in self._all_product_ids():
+                fallback_substitutions = self._product_substitutions(fallback)
+                if fallback_substitutions is not None:
+                    yield fallback_substitutions
+
+        for attempt in attempts():
+            try:
+                data = get_ssg_modules().yaml.open_and_expand(str(rule_path), attempt)
+            except Exception:
+                continue
+            logger.debug(f"Expanded {rule_path} with product {attempt.get('product')!r}")
+            return data  # type: ignore[no-any-return]
+
+        with open(rule_path) as f:
+            return yaml.load(f.read(), Loader=yaml.FullLoader)  # type: ignore[no-any-return]
 
     def search_rules(
         self,

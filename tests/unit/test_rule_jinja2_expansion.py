@@ -28,7 +28,9 @@ class TestLoadRuleYaml:
         ):
             result = discovery._load_rule_yaml(rule_file)
 
-        mock_ssg_modules.yaml.open_and_expand.assert_called_once_with(str(rule_file), {})
+        mock_ssg_modules.yaml.open_and_expand.assert_called_once_with(
+            str(rule_file), {"product": ""}
+        )
         assert result == {"title": "expanded"}
 
     def test_passes_product_substitutions(self, tmp_path):

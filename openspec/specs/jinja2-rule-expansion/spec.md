@@ -3,6 +3,8 @@
 ### Requirement: Rule YAML loading with Jinja2 expansion
 The `RuleDiscovery` class SHALL use `ssg.yaml.open_and_expand()` to load rule YAML files instead of direct `yaml.load()`. This SHALL process Jinja2 control structures (`{% if %}`, `{% endif %}`, `{% set %}`) before YAML parsing, making rules with block-level Jinja2 templates discoverable.
 
+When a product is given, the system SHALL expand the rule with that product's variables as the build does: the product's `product.yml` plus the `product_properties` directory. Without a product, the system SHALL expand the rule with `product` set to an empty string.
+
 #### Scenario: Rule with Jinja2 control structures is discoverable without product
 - **WHEN** `get_rule_details` is called for a rule whose `rule.yml` contains `{% if product == "rhel10" %}` blocks and no `product` parameter is provided
 - **THEN** the system SHALL return a valid `RuleDetail` with core metadata (title, severity, identifiers) populated
@@ -10,6 +12,14 @@ The `RuleDiscovery` class SHALL use `ssg.yaml.open_and_expand()` to load rule YA
 #### Scenario: Rule with Jinja2 control structures is discoverable with product
 - **WHEN** `get_rule_details` is called for a rule whose `rule.yml` contains `{% if product == "rhel10" %}` blocks and `product="rhel10"` is provided
 - **THEN** the system SHALL return a valid `RuleDetail` with product-specific content (e.g., warnings, platform constraints) from the matching conditional branch
+
+#### Scenario: Product variables are expanded
+- **WHEN** `get_rule_details` is called with `product="ubuntu2204"` for a rule whose description starts with `{{{ full_name }}}`
+- **THEN** the description starts with "Ubuntu 22.04"
+
+#### Scenario: Rule testing the product name loads without a product
+- **WHEN** `get_rule_details` is called without `product` for a rule whose `rule.yml` contains `{{% if 'ubuntu' in product %}}`
+- **THEN** the system SHALL return a valid `RuleDetail`, with that condition evaluated as false
 
 #### Scenario: Rule without Jinja2 templates loads normally
 - **WHEN** `get_rule_details` is called for a rule whose `rule.yml` contains no Jinja2 control structures
@@ -33,6 +43,10 @@ If `ssg.yaml.open_and_expand()` raises an exception for a rule file, the system 
 - **WHEN** `ssg.yaml.open_and_expand()` raises an exception for a rule file
 - **THEN** the system SHALL attempt to load the file using direct `yaml.load()` and return the result if successful
 
+#### Scenario: Expansion without a product needs product variables
+- **WHEN** no `product` is given and both the generic expansion and direct `yaml.load()` fail for a rule file
+- **THEN** the system SHALL expand the rule again keeping `{{{ full_name }}}` as literal text, and then with the variables of each product in alphabetical order, returning the first result that loads
+
 #### Scenario: Both expansion and raw loading fail
-- **WHEN** both `ssg.yaml.open_and_expand()` and direct `yaml.load()` fail for a rule file
+- **WHEN** every expansion and direct `yaml.load()` fail for a rule file
 - **THEN** the system SHALL return `None` (existing error handling behavior)
