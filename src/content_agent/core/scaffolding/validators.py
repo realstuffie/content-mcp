@@ -2,12 +2,63 @@
 
 import logging
 import re
+import tempfile
+from pathlib import Path
+from typing import Any
 
 import yaml
 
 from content_agent.models import ValidationError, ValidationResult
 
 logger = logging.getLogger(__name__)
+
+
+def _expand_rule_jinja(yaml_content: str) -> Any | None:
+    """Expand ComplianceAsCode Jinja2 in rule YAML the way rule discovery does.
+
+    Returns None when the content can't be expanded, for example when no content
+    repository is initialized.
+    """
+    try:
+        from content_agent.core.discovery.rules import RuleDiscovery
+
+        discovery = RuleDiscovery()
+    except Exception as e:
+        logger.debug(f"Rule discovery unavailable for Jinja2 expansion: {e}")
+        return None
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        rule_path = Path(tmp_dir) / "rule.yml"
+        rule_path.write_text(yaml_content)
+        try:
+            return discovery._load_rule_yaml(rule_path)
+        except Exception as e:
+            logger.debug(f"Jinja2 expansion of rule YAML failed: {e}")
+            return None
+
+
+def _restore_fields_lost_in_expansion(data: Any, yaml_content: str, fields: set[str]) -> Any:
+    """Put back required fields that Jinja2 expansion removed or emptied.
+
+    ssg's loader removes documentation_complete while expanding, and a field whose
+    value is only a macro, such as {{{ describe_timer_enable(...) }}}, can expand to
+    nothing without a product. A field the raw content defines counts as present.
+    """
+    if not isinstance(data, dict):
+        return data
+    restored = dict(data)
+    for field in fields:
+        if restored.get(field):
+            continue
+        match = re.search(rf"^{re.escape(field)}:[ \t]*(.*)$", yaml_content, re.MULTILINE)
+        if match is None:
+            continue
+        value = match.group(1).strip()
+        if field == "documentation_complete" and value:
+            restored[field] = yaml.safe_load(value)
+        else:
+            restored[field] = "(set by Jinja2)"
+    return restored
 
 
 class RuleValidator:
@@ -34,10 +85,10 @@ class RuleValidator:
     ) -> ValidationResult:
         """Validate rule YAML content.
 
-        Note: This validator is designed for NEW rules being created during scaffolding.
-        It uses yaml.safe_load() which does not expand Jinja2 templates. If you need to
-        validate existing rules from ComplianceAsCode/content that contain Jinja2 macros
-        ({{{ }}}), the templates will be treated as literal strings in the validation.
+        Content that plain YAML can parse is validated as is, with any Jinja2 macros
+        ({{{ }}}) treated as literal strings. When Jinja2 makes the content invalid YAML,
+        as in many existing ComplianceAsCode rules, it is expanded the way rule
+        discovery does without a product, and the expanded rule is validated.
 
         Args:
             yaml_content: YAML content to validate
@@ -52,8 +103,23 @@ class RuleValidator:
         fixes_applied: list[str] = []
 
         try:
-            # Parse YAML
-            data = yaml.safe_load(yaml_content)
+            # Parse YAML, expanding Jinja2 when it makes the content invalid YAML
+            try:
+                data = yaml.safe_load(yaml_content)
+            except yaml.YAMLError:
+                expanded = _expand_rule_jinja(yaml_content) if "{{" in yaml_content else None
+                if expanded is None:
+                    raise
+                data = _restore_fields_lost_in_expansion(
+                    expanded, yaml_content, self.REQUIRED_FIELDS
+                )
+                warnings.append(
+                    ValidationError(
+                        field="yaml",
+                        error="Validated after expanding Jinja2 without a product",
+                        suggestion="Product-specific content was not checked",
+                    )
+                )
 
             if not isinstance(data, dict):
                 errors.append(
