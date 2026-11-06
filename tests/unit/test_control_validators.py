@@ -150,3 +150,57 @@ def test_validate_control_directory_nonexistent(validator):
     """Test validation of nonexistent directory."""
     result = validator.validate_control_directory(Path("/nonexistent/dir"))
     assert result.valid is False
+
+
+def test_validate_rule_references_skips_variables_and_unselections(validator):
+    """Variables, refinements and unselections are not rule references."""
+    control = ControlFile(
+        id="test_policy",
+        title="Test Policy",
+        controls=[
+            ControlRequirement(
+                id="5.4.3.3",
+                rules=[
+                    "accounts_umask_etc_bashrc",
+                    "var_accounts_user_umask=027",
+                    "accounts_umask_etc_bashrc.severity=high",
+                    "!removed_rule",
+                ],
+                related_rules=["var_related=1"],
+            ),
+        ],
+    )
+
+    result = validator.validate_rule_references(control, ["accounts_umask_etc_bashrc"])
+    assert result.valid is True
+    assert result.errors == []
+    assert result.warnings == []
+
+
+def test_validate_rule_references_without_rule_list_skips_checks(validator):
+    """When the rule list can't be loaded, rules are not reported as missing."""
+
+    class BrokenDiscovery:
+        def search_rules(self, limit):
+            raise RuntimeError("content repository not initialized")
+
+    validator.rule_discovery = BrokenDiscovery()
+    control = ControlFile(
+        id="test_policy",
+        title="Test Policy",
+        controls=[ControlRequirement(id="REQ-1", rules=["some_rule"])],
+    )
+
+    result = validator.validate_rule_references(control)
+    assert result.valid is True
+    assert result.errors == []
+    assert "skipping rule checks" in result.warnings[0]
+
+
+def test_validate_control_structure_requirement_without_description(validator):
+    """Requirements without a description produce no warning."""
+    result = validator.validate_control_structure(
+        {"id": "policy", "title": "Policy", "controls": [{"id": "1.1", "title": "T"}]}
+    )
+    assert result.valid is True
+    assert result.warnings == []

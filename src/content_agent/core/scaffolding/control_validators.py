@@ -15,6 +15,16 @@ from content_agent.models.control import (
 logger = logging.getLogger(__name__)
 
 
+def _selected_rules(entries: list[str]) -> list[str]:
+    """Return the entries of a requirement's rule list that select a rule.
+
+    Entries containing ``=`` set variables (``var_x=value``) or refine rules
+    (``rule.severity=high``), and ``!rule`` entries unselect. Like the build's
+    ``Policy.check_all_rules_exist``, only selected rules are checked.
+    """
+    return [entry for entry in entries if "=" not in entry and not entry.startswith("!")]
+
+
 class ControlValidator:
     """Validator for control files."""
 
@@ -97,7 +107,7 @@ class ControlValidator:
             ControlValidationResult
         """
         errors = []
-        warnings = []
+        warnings: list[str] = []
 
         # Required fields
         required_fields = ["id", "title"]
@@ -134,13 +144,11 @@ class ControlValidator:
                         errors.append(f"Control at index {idx} must be a dictionary")
                         continue
 
-                    # Validate individual control requirement
+                    # Validate individual control requirement. Requirements don't
+                    # need a description: ComplianceAsCode control files use title
+                    # and notes instead.
                     if "id" not in ctrl:
                         errors.append(f"Control at index {idx} missing 'id' field")
-                    if "description" not in ctrl:
-                        warnings.append(
-                            f"Control {ctrl.get('id', idx)} missing 'description' field"
-                        )
 
         # Validate includes if present
         if "includes" in control_data:
@@ -194,21 +202,23 @@ class ControlValidator:
                 rule_results = self.rule_discovery.search_rules(limit=10000)
                 available_rules = [r.rule_id for r in rule_results.items]
             except Exception as e:
-                warnings.append(f"Could not load available rules: {e}")
-                available_rules = []
+                warnings.append(f"Could not load available rules, skipping rule checks: {e}")
+                return ControlValidationResult(valid=True, errors=[], warnings=warnings)
+
+        known_rules = set(available_rules)
 
         # Check all rule references in controls
         for control_req in flatten_requirements(control.controls):
             # Check rules
-            for rule_id in control_req.rules:
-                if rule_id not in available_rules:
+            for rule_id in _selected_rules(control_req.rules):
+                if rule_id not in known_rules:
                     errors.append(
                         f"Rule '{rule_id}' referenced in control '{control_req.id}' does not exist"
                     )
 
             # Check related_rules (warnings only)
-            for rule_id in control_req.related_rules:
-                if rule_id not in available_rules:
+            for rule_id in _selected_rules(control_req.related_rules):
+                if rule_id not in known_rules:
                     warnings.append(
                         f"Related rule '{rule_id}' in control '{control_req.id}' does not exist"
                     )
