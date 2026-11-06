@@ -18,6 +18,7 @@ from typing import Any
 import yaml
 
 from content_agent.core.integration import get_content_repository
+from content_agent.core.integration.product_variables import load_product_variables
 from content_agent.core.integration.ssg_modules import get_ssg_modules
 from content_agent.models import (
     DiscoveryResult,
@@ -57,18 +58,15 @@ class RuleDiscovery:
         can't be loaded.
         """
         if product not in self._product_env_cache:
-            repo_path = self.content_repo.path
-            product_yaml = repo_path / "products" / product / "product.yml"
-            env: dict[str, Any] | None = None
             try:
-                loaded = get_ssg_modules().products.load_product_yaml(str(product_yaml))
-                properties_dir = repo_path / "product_properties"
-                if properties_dir.is_dir():
-                    loaded.read_properties_from_directory(str(properties_dir))
-                env = dict(loaded)
+                ssg_products = get_ssg_modules().products
             except Exception as e:
-                logger.debug(f"Could not load the environment of product {product}: {e}")
-            self._product_env_cache[product] = env
+                logger.debug(f"SSG modules unavailable for product {product}: {e}")
+                self._product_env_cache[product] = None
+            else:
+                self._product_env_cache[product] = load_product_variables(
+                    ssg_products, self.content_repo.path, product
+                )
         cached = self._product_env_cache[product]
         return dict(cached) if cached is not None else None
 

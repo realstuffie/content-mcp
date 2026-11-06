@@ -2,10 +2,13 @@
 
 import logging
 from pathlib import Path
+from typing import Any
 
 import yaml
 
 from content_agent.core.integration import get_content_repository
+from content_agent.core.integration.product_variables import load_product_variables
+from content_agent.core.integration.ssg_modules import get_ssg_modules
 from content_agent.models.control import (
     ControlFile,
     ControlRequirement,
@@ -19,6 +22,13 @@ from content_agent.models.control import (
 
 logger = logging.getLogger(__name__)
 
+# Jinja2 variables for expanding requirement files without a product
+GENERIC_SUBSTITUTIONS: dict[str, Any] = {
+    "product": "",
+    "families": [],
+    "full_name": "The operating system",
+}
+
 
 class ControlDiscovery:
     """Control framework discovery."""
@@ -26,6 +36,7 @@ class ControlDiscovery:
     def __init__(self) -> None:
         """Initialize control discovery."""
         self.content_repo = get_content_repository()
+        self._product_env_cache: dict[str, dict[str, Any] | None] = {}
 
     def _get_controls_dirs(self, product: str | None = None) -> list[Path]:
         """Return ordered list of control directories to scan.
@@ -149,16 +160,19 @@ class ControlDiscovery:
             logger.warning(f"Control file not found: {control_id}")
             return None
 
-        return self.parse_control_file(control_file, source_dir=control_file.parent)
+        return self.parse_control_file(
+            control_file, source_dir=control_file.parent, product=product
+        )
 
     def parse_control_file(
-        self, file_path: Path, source_dir: Path | None = None
+        self, file_path: Path, source_dir: Path | None = None, product: str | None = None
     ) -> ControlFile | None:
         """Parse control YAML into structured model.
 
         Args:
             file_path: Path to control file
             source_dir: Directory from which this file was loaded
+            product: Optional product ID for expanding Jinja2 in requirement files
 
         Returns:
             ControlFile object, or None if parsing fails
@@ -179,8 +193,7 @@ class ControlDiscovery:
                     full_path = base_dir / include_path
                     if full_path.exists():
                         try:
-                            req = self._parse_requirement_file(full_path)
-                            controls.append(req)
+                            controls.extend(self._parse_requirement_file(full_path, product))
                         except Exception as e:
                             error_msg = f"Failed to parse requirement file {full_path}: {e}"
                             logger.warning(error_msg)
@@ -197,8 +210,7 @@ class ControlDiscovery:
                 if controls_subdir.exists() and controls_subdir.is_dir():
                     for ctrl_file in sorted(controls_subdir.glob("*.yml")):
                         try:
-                            req = self._parse_requirement_file(ctrl_file)
-                            controls.append(req)
+                            controls.extend(self._parse_requirement_file(ctrl_file, product))
                         except Exception as e:
                             error_msg = f"Failed to parse requirement file {ctrl_file}: {e}"
                             logger.warning(error_msg)
@@ -668,22 +680,68 @@ class ControlDiscovery:
         logger.info(f"Found {len(results)} unmapped requirements in '{control_id}'")
         return results
 
-    def _parse_requirement_file(self, file_path: Path) -> ControlRequirement:
-        """Parse individual requirement file.
+    def _product_substitutions(self, product: str) -> dict[str, Any] | None:
+        if product not in self._product_env_cache:
+            try:
+                ssg_products = get_ssg_modules().products
+            except Exception as e:
+                logger.debug(f"SSG modules unavailable for product {product}: {e}")
+                self._product_env_cache[product] = None
+            else:
+                self._product_env_cache[product] = load_product_variables(
+                    ssg_products, self.content_repo.path, product
+                )
+        cached = self._product_env_cache[product]
+        return dict(cached) if cached is not None else None
+
+    def _load_requirement_yaml(self, file_path: Path, product: str | None) -> Any:
+        """Load a requirement file, expanding Jinja2 like the build does.
+
+        Requirement files use Jinja2 such as ``{{{ full_name }}}`` in titles. With a
+        product, the product's variables are used. Without one, product conditionals
+        are false and full_name is "The operating system", the wording SRGs use where
+        ComplianceAsCode substitutes the product name. If expansion fails, the file
+        is loaded as plain YAML.
+        """
+        substitutions = (self._product_substitutions(product) if product else None) or {
+            **GENERIC_SUBSTITUTIONS,
+            "product": product or "",
+        }
+        try:
+            ssg_yaml = get_ssg_modules().yaml
+            data = ssg_yaml.open_and_expand(str(file_path), substitutions)
+            if isinstance(data, dict):
+                return data
+            logger.debug(f"Jinja2 expansion of {file_path} returned no mapping")
+        except Exception as e:
+            logger.debug(f"Jinja2 expansion failed for {file_path}: {e}")
+        with open(file_path) as f:
+            return yaml.safe_load(f)
+
+    def _parse_requirement_file(
+        self, file_path: Path, product: str | None = None
+    ) -> list[ControlRequirement]:
+        """Parse a requirement file from a control file's subdirectory or includes.
+
+        ComplianceAsCode puts the requirements of each file in a ``controls`` list,
+        and a file can hold several, like the NIST 800-53 family files. A file with
+        a single requirement at the top level is accepted too.
 
         Args:
             file_path: Path to requirement file
+            product: Optional product ID for Jinja2 expansion
 
         Returns:
-            ControlRequirement object
+            The requirements defined in the file
 
         Raises:
             Exception: If YAML parsing or model construction fails
         """
-        with open(file_path) as f:
-            data = yaml.safe_load(f)
+        data = self._load_requirement_yaml(file_path, product)
 
-        return ControlRequirement(**data)
+        if isinstance(data, dict) and "id" not in data and isinstance(data.get("controls"), list):
+            return [ControlRequirement(**item) for item in data["controls"]]
+        return [ControlRequirement(**data)]
 
 
 def list_controls(product: str | None = None) -> list[str]:
