@@ -24,3 +24,15 @@ class TestProfileResolutionWithRealContent:
 
         assert discovery._profile_rule_index is not None
         assert not [key for key in discovery._profile_rule_index if ":" in key]
+
+
+@requires_content_repo
+class TestSearchRulesProductFilterWithRealContent:
+    def test_ubuntu_rules_found_through_profiles(self, real_content_repo):
+        from content_agent.core.discovery.rules import RuleDiscovery
+
+        result = RuleDiscovery().search_rules(query="sshd", product="ubuntu2204", limit=500)
+
+        # Ubuntu rules rarely have identifiers for the product, so before profile
+        # selections counted, this search returned nothing.
+        assert "sshd_disable_root_login" in {r.rule_id for r in result.items}

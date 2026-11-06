@@ -38,6 +38,27 @@ logger = logging.getLogger(__name__)
 GENERIC_SUBSTITUTIONS: dict[str, Any] = {"product": ""}
 FULL_NAME_PLACEHOLDER: dict[str, Any] = {"product": "", "full_name": "{{{ full_name }}}"}
 
+ProfileRuleIndex = dict[str, list[tuple[str, str]]]
+
+# Every MCP tool call creates a new RuleDiscovery, and building the profile index
+# reads every profile and control file, so the index is shared between instances.
+# It is rebuilt when a profile or control file is added, removed or modified.
+_shared_profile_indexes: dict[str, tuple[tuple[int, float], ProfileRuleIndex]] = {}
+
+
+def _profile_inputs_signature(repo_path: Path) -> tuple[int, float] | None:
+    """Return (file count, newest mtime) of the files the profile index is built from."""
+    try:
+        files = [
+            *repo_path.glob("products/*/profiles/*.profile"),
+            *repo_path.glob("controls/**/*.yml"),
+            *repo_path.glob("products/*/controls/**/*.yml"),
+        ]
+        return len(files), max((f.stat().st_mtime for f in files), default=0.0)
+    except Exception as e:
+        logger.debug(f"Could not compute the profile index signature: {e}")
+        return None
+
 
 class RuleDiscovery:
     """Rule discovery and information retrieval."""
@@ -165,6 +186,7 @@ class RuleDiscovery:
 
         discovery_result: DiscoveryResult[RuleSearchResult] = DiscoveryResult()
         query_lower = query.lower() if query else None
+        product_rules = self._rules_selected_by_product(product) if product else set()
 
         assert self._rule_cache is not None
         for rule_id, rule_path in self._rule_cache.items():
@@ -172,7 +194,7 @@ class RuleDiscovery:
                 # Quick ID match
                 if query_lower and query_lower in rule_id.lower():
                     result = self._load_search_result(rule_id, rule_path, product=product)
-                    if self._matches_filters(result, product, severity):
+                    if self._matches_filters(result, product, severity, product_rules):
                         discovery_result.items.append(result)
                         if len(discovery_result.items) >= limit:
                             break
@@ -182,14 +204,14 @@ class RuleDiscovery:
                 if query_lower:
                     result = self._load_search_result(rule_id, rule_path, product=product)
                     if self._matches_query(result, query_lower):
-                        if self._matches_filters(result, product, severity):
+                        if self._matches_filters(result, product, severity, product_rules):
                             discovery_result.items.append(result)
                             if len(discovery_result.items) >= limit:
                                 break
                 else:
                     # No query, just filter
                     result = self._load_search_result(rule_id, rule_path, product=product)
-                    if self._matches_filters(result, product, severity):
+                    if self._matches_filters(result, product, severity, product_rules):
                         discovery_result.items.append(result)
                         if len(discovery_result.items) >= limit:
                             break
@@ -329,6 +351,30 @@ class RuleDiscovery:
             f"Profile rule index built: {len(self._profile_rule_index)} rules across profiles"
         )
 
+    def _ensure_profile_rule_index(self) -> ProfileRuleIndex:
+        """Return the profile index, reusing the shared one when its inputs are unchanged."""
+        if self._profile_rule_index is None:
+            repo_key = str(self.content_repo.path)
+            signature = _profile_inputs_signature(self.content_repo.path)
+            shared = _shared_profile_indexes.get(repo_key)
+            if signature is not None and shared is not None and shared[0] == signature:
+                self._profile_rule_index = shared[1]
+            else:
+                self._build_profile_rule_index()
+                assert self._profile_rule_index is not None  # for mypy
+                if signature is not None:
+                    _shared_profile_indexes[repo_key] = (signature, self._profile_rule_index)
+        return self._profile_rule_index
+
+    def _rules_selected_by_product(self, product: str) -> set[str]:
+        """Return the rules that any profile of the product selects."""
+        index = self._ensure_profile_rule_index()
+        return {
+            rule_id
+            for rule_id, entries in index.items()
+            if any(entry_product == product for entry_product, _ in entries)
+        }
+
     def get_rule_product_availability(self, rule_id: str) -> RuleProductAvailability | None:
         """Determine which products include a rule and in which profiles.
 
@@ -345,15 +391,9 @@ class RuleDiscovery:
         if not rule:
             return None
 
-        # Build profile index if not cached
-        if self._profile_rule_index is None:
-            self._build_profile_rule_index()
-
-        assert self._profile_rule_index is not None  # for mypy
-
         # Get products from profiles
         products_in_profiles: dict[str, list[str]] = {}
-        profile_entries = self._profile_rule_index.get(rule_id, [])
+        profile_entries = self._ensure_profile_rule_index().get(rule_id, [])
         for product, profile_id in profile_entries:
             if product not in products_in_profiles:
                 products_in_profiles[product] = []
@@ -476,19 +516,29 @@ class RuleDiscovery:
         return query in searchable
 
     def _matches_filters(
-        self, result: RuleSearchResult, product: str | None, severity: str | None
+        self,
+        result: RuleSearchResult,
+        product: str | None,
+        severity: str | None,
+        product_rules: set[str] | None = None,
     ) -> bool:
         """Check if result matches filters.
 
         Args:
             result: Search result
-            product: Product filter
+            product: Product filter. A rule matches when the product's profiles
+                select it or it has identifiers for the product.
             severity: Severity filter
+            product_rules: Rules the product's profiles select
 
         Returns:
             True if matches all filters
         """
-        if product and product not in result.products:
+        if (
+            product
+            and product not in result.products
+            and result.rule_id not in (product_rules or set())
+        ):
             return False
 
         if severity and result.severity != severity:

@@ -50,7 +50,10 @@ TOOLS = [
                 },
                 "product": {
                     "type": "string",
-                    "description": "Filter by product ID",
+                    "description": (
+                        "Filter by product ID: rules that the product's profiles select, "
+                        "or that have identifiers for the product"
+                    ),
                 },
                 "severity": {
                     "type": "string",
