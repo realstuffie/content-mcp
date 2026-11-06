@@ -232,34 +232,28 @@ class RuleDiscovery:
         return details
 
     def _build_profile_rule_index(self) -> None:
-        """Build reverse index mapping rule IDs to (product, profile_id) tuples."""
+        """Build reverse index mapping rule IDs to (product, profile_id) tuples.
+
+        Profile selections are resolved like the build does: control references such
+        as ``cis_rhel9:all:l2_server`` expand to the rules of the selected requirements,
+        ``extends`` adds the parent profile's rules, and ``!rule`` entries remove rules.
+        """
+        from content_agent.core.discovery.profile_resolution import ProfileRuleResolver
         from content_agent.core.discovery.profiles import ProfileDiscovery
 
         logger.info("Building profile-to-rule reverse index")
         self._profile_rule_index = {}
 
         profile_discovery = ProfileDiscovery()
+        resolver = ProfileRuleResolver(profile_discovery)
         profiles_result = profile_discovery.list_profiles()
 
         for profile_summary in profiles_result.items:
             product = profile_summary.product
             profile_id = profile_summary.profile_id
 
-            profile = profile_discovery.get_profile_details(profile_id, product)
-            if not profile:
-                continue
-
-            for selection in profile.selections:
-                # Only match direct rule IDs, not control references like "anssi:all:minimal"
-                if ":" in selection:
-                    continue
-                # Skip unselection directives
-                if selection.startswith("!"):
-                    continue
-
-                if selection not in self._profile_rule_index:
-                    self._profile_rule_index[selection] = []
-                self._profile_rule_index[selection].append((product, profile_id))
+            for rule_id in sorted(resolver.resolve_profile(product, profile_id)):
+                self._profile_rule_index.setdefault(rule_id, []).append((product, profile_id))
 
         logger.info(
             f"Profile rule index built: {len(self._profile_rule_index)} rules across profiles"
