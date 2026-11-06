@@ -289,8 +289,10 @@ class RuleDiscovery:
         # Get file modification time
         last_modified = datetime.fromtimestamp(rule_path.stat().st_mtime)
 
-        # Handle platforms - can be a string or list
-        platforms = data.get("platform", data.get("platforms", []))
+        # Handle platforms - can be a string or list. A platforms block whose Jinja2
+        # expands to nothing, such as rule_notapplicable_when_ovirt_installed() on most
+        # products, loads as None.
+        platforms = data.get("platform") or data.get("platforms") or []
         if isinstance(platforms, str):
             platforms = [platforms]
 

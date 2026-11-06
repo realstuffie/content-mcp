@@ -254,3 +254,35 @@ class TestSearchRulesWithJinja2:
 
         rule_ids = [r.rule_id for r in results.items]
         assert "accounts_password_pam_unix_enabled" in rule_ids
+
+
+class TestEmptyPlatforms:
+    """A platforms block whose Jinja2 expands to nothing loads as None."""
+
+    @patch("content_agent.core.discovery.rules.get_content_repository")
+    def test_rule_with_empty_platforms_loads(self, mock_repo, tmp_path):
+        from content_agent.core.discovery.rules import RuleDiscovery
+
+        rule_dir = tmp_path / "linux_os" / "guide" / "sshd_rule"
+        rule_dir.mkdir(parents=True)
+        rule_file = rule_dir / "rule.yml"
+        rule_file.write_text("title: SSH Rule\n")
+
+        mock_repo.return_value.path = tmp_path
+        discovery = RuleDiscovery()
+        discovery._rule_cache = {"sshd_rule": rule_file}
+
+        mock_ssg_modules = MagicMock()
+        mock_ssg_modules.yaml.open_and_expand.return_value = {
+            "title": "SSH Rule",
+            "platforms": None,
+        }
+
+        with patch(
+            "content_agent.core.discovery.rules.get_ssg_modules",
+            return_value=mock_ssg_modules,
+        ):
+            result = discovery.get_rule_details("sshd_rule", include_rendered=False)
+
+        assert result is not None
+        assert result.platforms == []
