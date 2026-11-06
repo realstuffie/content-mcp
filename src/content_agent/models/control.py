@@ -15,8 +15,8 @@ class ControlRequirement(BaseModel):
         description="Requirement ID (e.g., 'AC-2(5)', '1.1.1')",
     )
     title: str = Field(
-        ...,
-        description="Requirement title or short description",
+        default="",
+        description="Requirement title or short description (optional in control files)",
     )
     description: str | None = Field(
         default=None,
