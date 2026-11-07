@@ -4,6 +4,13 @@
 
 This directory contains unit and integration tests for the content-agent.
 
+The MCP resource regression tests use SDK sessions and temporary content.
+They run without a real content checkout.
+
+```bash
+pytest tests/integration/test_mcp_protocol.py -q
+```
+
 ## Test Structure
 
 ```

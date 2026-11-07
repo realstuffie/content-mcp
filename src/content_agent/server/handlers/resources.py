@@ -1,5 +1,6 @@
 """MCP resource handlers."""
 
+import json
 import logging
 from typing import Any
 from urllib.parse import urlparse
@@ -46,18 +47,14 @@ async def handle_resource_read(uri: str) -> str:
         if len(path_parts) == 1:
             # List all products
             products_result = discovery.list_products()
-            import json
-
-            return json.dumps([p.model_dump() for p in products_result.items], indent=2)
+            return json.dumps([p.model_dump(mode="json") for p in products_result.items], indent=2)
         elif len(path_parts) == 2:
             # Get specific product
             product_id = path_parts[1]
             product = discovery.get_product_details(product_id)
             if not product:
                 raise ValueError(f"Product not found: {product_id}")
-            import json
-
-            return json.dumps(product.model_dump(), indent=2)
+            return json.dumps(product.model_dump(mode="json"), indent=2)
         else:
             raise ValueError(f"Invalid products resource path: {uri}")
 
@@ -65,18 +62,14 @@ async def handle_resource_read(uri: str) -> str:
         if len(path_parts) == 1:
             # List all rules (limited)
             rules_result = discovery.search_rules(limit=100)
-            import json
-
-            return json.dumps([r.model_dump() for r in rules_result.items], indent=2)
+            return json.dumps([r.model_dump(mode="json") for r in rules_result.items], indent=2)
         elif len(path_parts) == 2:
             # Get specific rule
             rule_id = path_parts[1]
             rule = discovery.get_rule_details(rule_id)
             if not rule:
                 raise ValueError(f"Rule not found: {rule_id}")
-            import json
-
-            return json.dumps(rule.model_dump(), indent=2)
+            return json.dumps(rule.model_dump(mode="json"), indent=2)
         else:
             raise ValueError(f"Invalid rules resource path: {uri}")
 
@@ -84,18 +77,14 @@ async def handle_resource_read(uri: str) -> str:
         if len(path_parts) == 1:
             # List all templates
             templates = discovery.list_templates()
-            import json
-
-            return json.dumps([t.model_dump() for t in templates], indent=2)
+            return json.dumps([t.model_dump(mode="json") for t in templates], indent=2)
         elif len(path_parts) == 2:
             # Get template schema
             template_name = path_parts[1]
             schema = discovery.get_template_schema(template_name)
             if not schema:
                 raise ValueError(f"Template not found: {template_name}")
-            import json
-
-            return json.dumps(schema.model_dump(), indent=2)
+            return json.dumps(schema.model_dump(mode="json"), indent=2)
         else:
             raise ValueError(f"Invalid templates resource path: {uri}")
 
@@ -103,9 +92,7 @@ async def handle_resource_read(uri: str) -> str:
         if len(path_parts) == 1:
             # List all profiles
             profiles_result = discovery.list_profiles()
-            import json
-
-            return json.dumps([p.model_dump() for p in profiles_result.items], indent=2)
+            return json.dumps([p.model_dump(mode="json") for p in profiles_result.items], indent=2)
         elif len(path_parts) == 3:
             # Get specific profile (product/profile_id)
             product_id = path_parts[1]
@@ -113,9 +100,7 @@ async def handle_resource_read(uri: str) -> str:
             profile = discovery.get_profile_details(profile_id, product_id)
             if not profile:
                 raise ValueError(f"Profile not found: {profile_id} in {product_id}")
-            import json
-
-            return json.dumps(profile.model_dump(), indent=2)
+            return json.dumps(profile.model_dump(mode="json"), indent=2)
         else:
             raise ValueError(f"Invalid profiles resource path: {uri}")
 
@@ -123,8 +108,6 @@ async def handle_resource_read(uri: str) -> str:
         if len(path_parts) == 1:
             # List control frameworks
             controls = discovery.list_controls()
-            import json
-
             return json.dumps(controls, indent=2)
         else:
             raise ValueError(f"Invalid controls resource path: {uri}")
@@ -134,8 +117,6 @@ async def handle_resource_read(uri: str) -> str:
         if len(path_parts) == 1:
             # List built products
             products = discovery.list_built_products()
-            import json
-
             return json.dumps({"products": products, "count": len(products)}, indent=2)
         elif len(path_parts) == 2:
             # Get product datastream info
@@ -143,9 +124,7 @@ async def handle_resource_read(uri: str) -> str:
             info = discovery.get_datastream_info(build_product)
             if not info:
                 raise ValueError(f"No build artifacts for product: {build_product}")
-            import json
-
-            return json.dumps(info.model_dump(), indent=2)
+            return json.dumps(info.model_dump(mode="json"), indent=2)
         elif len(path_parts) >= 4 and path_parts[2] == "rules":
             # Get rendered rule: build/{product}/rules/{rule_id}
             build_product = path_parts[1]
@@ -153,9 +132,7 @@ async def handle_resource_read(uri: str) -> str:
             rendered = discovery.get_rendered_rule(build_product, rule_id)
             if not rendered:
                 raise ValueError(f"Rendered rule not found: {rule_id} for {build_product}")
-            import json
-
-            return json.dumps(rendered.model_dump(), indent=2)
+            return json.dumps(rendered.model_dump(mode="json"), indent=2)
         else:
             raise ValueError(f"Invalid build resource path: {uri}")
 
