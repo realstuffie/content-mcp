@@ -6,7 +6,7 @@ from typing import Any
 from mcp.server import Server
 from mcp.server.lowlevel.helper_types import ReadResourceContents
 from mcp.server.stdio import stdio_server
-from mcp.types import Resource, Tool
+from mcp.types import Resource, ResourceTemplate, Tool
 from pydantic import AnyUrl
 
 from content_agent.server.handlers import prompts, resources, tools
@@ -40,6 +40,11 @@ class ContentAgentServer:
                 )
                 for r in resource_list
             ]
+
+        @self.server.list_resource_templates()
+        async def handle_list_resource_templates() -> list[ResourceTemplate]:
+            """Advertise parameterized URIs as templates, not concrete resources."""
+            return [ResourceTemplate(**r) for r in resources.list_resource_templates()]
 
         # Read resource handler
         @self.server.read_resource()

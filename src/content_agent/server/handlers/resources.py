@@ -154,21 +154,9 @@ def list_resources() -> list[dict[str, Any]]:
             "mimeType": "application/json",
         },
         {
-            "uri": "cac://products/{product_id}",
-            "name": "Product Details",
-            "description": "Detailed information about a specific product",
-            "mimeType": "application/json",
-        },
-        {
             "uri": "cac://rules",
             "name": "Rules",
             "description": "List of available rules",
-            "mimeType": "application/json",
-        },
-        {
-            "uri": "cac://rules/{rule_id}",
-            "name": "Rule Details",
-            "description": "Detailed information about a specific rule",
             "mimeType": "application/json",
         },
         {
@@ -178,21 +166,9 @@ def list_resources() -> list[dict[str, Any]]:
             "mimeType": "application/json",
         },
         {
-            "uri": "cac://templates/{template_name}",
-            "name": "Template Schema",
-            "description": "Schema definition for a template",
-            "mimeType": "application/json",
-        },
-        {
             "uri": "cac://profiles",
             "name": "Profiles",
             "description": "List of all profiles",
-            "mimeType": "application/json",
-        },
-        {
-            "uri": "cac://profiles/{product}/{profile_id}",
-            "name": "Profile Details",
-            "description": "Detailed information about a specific profile",
             "mimeType": "application/json",
         },
         {
@@ -207,14 +183,44 @@ def list_resources() -> list[dict[str, Any]]:
             "description": "List of products with build artifacts available",
             "mimeType": "application/json",
         },
+    ]
+
+
+def list_resource_templates() -> list[dict[str, Any]]:
+    """List parameterized resources using MCP URI template descriptors."""
+    return [
         {
-            "uri": "cac://build/{product}",
+            "uriTemplate": "cac://products/{product_id}",
+            "name": "Product Details",
+            "description": "Detailed information about a specific product",
+            "mimeType": "application/json",
+        },
+        {
+            "uriTemplate": "cac://rules/{rule_id}",
+            "name": "Rule Details",
+            "description": "Detailed information about a specific rule",
+            "mimeType": "application/json",
+        },
+        {
+            "uriTemplate": "cac://templates/{template_name}",
+            "name": "Template Schema",
+            "description": "Schema definition for a template",
+            "mimeType": "application/json",
+        },
+        {
+            "uriTemplate": "cac://profiles/{product}/{profile_id}",
+            "name": "Profile Details",
+            "description": "Detailed information about a specific profile",
+            "mimeType": "application/json",
+        },
+        {
+            "uriTemplate": "cac://build/{product}",
             "name": "Product Build Info",
             "description": "Build information and datastream details for a product",
             "mimeType": "application/json",
         },
         {
-            "uri": "cac://build/{product}/rules/{rule_id}",
+            "uriTemplate": "cac://build/{product}/rules/{rule_id}",
             "name": "Rendered Rule",
             "description": "Fully rendered rule content from build directory (after Jinja processing)",
             "mimeType": "application/json",

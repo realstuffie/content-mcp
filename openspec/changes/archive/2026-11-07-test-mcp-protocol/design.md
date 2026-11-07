@@ -29,6 +29,16 @@ Wrap resource text in ReadResourceContents with application/json. The
 session tests now check the URI, MIME type and JSON content of all
 12 resource routes.
 
+### Resource template discovery
+
+resources/list included URIs such as cac://products/{product_id} as
+concrete resources. The SDK escaped their braces, and clients could
+not discover their parameters through resources/templates/list.
+
+Keep the six collection URIs in resources/list and register the six
+parameterized descriptors as resource templates. A session test checks
+both discovery responses and their MIME types.
+
 ## Verification
 
 Each implemented fix has a regression test through an MCP session.

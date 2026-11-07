@@ -113,3 +113,31 @@ async def test_resource_content_is_json(mcp_session, uri):
             assert data["exists"]
             datetime.fromisoformat(data["build_time"])
             assert data["rules_count"] == data["profiles_count"] == 1
+
+
+async def test_resource_discovery_separates_templates(mcp_session):
+    async with mcp_session as mcp_session:
+        listing = await mcp_session.list_resources()
+        assert listing.nextCursor is None
+        uris = [str(resource.uri) for resource in listing.resources]
+        assert len(uris) == len(set(uris))
+        assert all("{" not in uri and "%7B" not in uri for uri in uris)
+        assert set(uris) == {
+            "cac://products",
+            "cac://rules",
+            "cac://templates",
+            "cac://profiles",
+            "cac://controls",
+            "cac://build",
+        }
+        templates = await mcp_session.list_resource_templates()
+        assert {template.uriTemplate for template in templates.resourceTemplates} == {
+            "cac://products/{product_id}",
+            "cac://rules/{rule_id}",
+            "cac://templates/{template_name}",
+            "cac://profiles/{product}/{profile_id}",
+            "cac://build/{product}",
+            "cac://build/{product}/rules/{rule_id}",
+        }
+        for descriptor in [*listing.resources, *templates.resourceTemplates]:
+            assert descriptor.mimeType == "application/json"

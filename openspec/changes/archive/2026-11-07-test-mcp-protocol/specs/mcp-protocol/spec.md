@@ -29,3 +29,13 @@ and preserve the requested resource URI in the response.
 
 - **WHEN** a client reads any supported resource route
 - **THEN** the response preserves its URI and declares application/json
+
+### Requirement: Resource template discovery
+
+The server SHALL list the six concrete collection URIs through
+resources/list and the six parameterized URIs through resources/templates/list.
+
+#### Scenario: Resource template discovery
+
+- **WHEN** a client lists resources and resource templates
+- **THEN** concrete URIs contain no placeholders and parameterized descriptors use uriTemplate

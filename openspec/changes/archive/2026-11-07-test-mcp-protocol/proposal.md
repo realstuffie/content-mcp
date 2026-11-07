@@ -12,6 +12,10 @@ Resource descriptors advertised application/json, but reads returned
 plain strings. The SDK wrapped those strings as text/plain, so the
 content metadata disagreed with the resource listing.
 
+resources/list included URIs such as cac://products/{product_id} as
+concrete resources. The SDK escaped their braces, and clients could
+not discover their parameters through resources/templates/list.
+
 ## What changes
 
 Convert the URI to a string at the server boundary. A regression test
@@ -24,6 +28,10 @@ text. Shared fixtures provide a temporary product, rule and build.
 Wrap resource text in ReadResourceContents with application/json. The
 session tests now check the URI, MIME type and JSON content of all
 12 resource routes.
+
+Keep the six collection URIs in resources/list and register the six
+parameterized descriptors as resource templates. A session test checks
+both discovery responses and their MIME types.
 
 ## Capabilities
 

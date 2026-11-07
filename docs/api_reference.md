@@ -10,6 +10,9 @@ Resource timestamps use ISO 8601 strings in JSON responses.
 
 Resource reads declare application/json and preserve the requested URI.
 
+resources/list returns concrete collection URIs. Parameterized URIs appear in
+resources/templates/list.
+
 ### Products
 
 **List all products**
