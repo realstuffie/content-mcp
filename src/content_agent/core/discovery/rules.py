@@ -17,6 +17,7 @@ from typing import Any
 
 import yaml
 
+from content_agent.core.discovery.rule_paths import rule_files
 from content_agent.core.integration import get_content_repository
 from content_agent.core.integration.product_variables import load_product_variables
 from content_agent.core.integration.ssg_modules import get_ssg_modules
@@ -428,21 +429,9 @@ class RuleDiscovery:
         logger.info("Building rule index")
         self._rule_cache = {}
 
-        # Search common rule locations
-        search_paths = [
-            self.content_repo.path / "linux_os",
-            self.content_repo.path / "applications",
-            self.content_repo.path / "shared",
-        ]
-
-        for search_path in search_paths:
-            if not search_path.exists():
-                continue
-
-            for rule_yml in search_path.rglob("rule.yml"):
-                rule_dir = rule_yml.parent
-                rule_id = rule_dir.name
-                self._rule_cache[rule_id] = rule_yml
+        # The directories the build reads rules from, as product.yml files name them
+        for rule_yml in rule_files(self.content_repo.path):
+            self._rule_cache[rule_yml.parent.name] = rule_yml
 
         logger.info(f"Indexed {len(self._rule_cache)} rules")
 

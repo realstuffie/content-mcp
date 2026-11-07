@@ -42,3 +42,20 @@ class TestRuleLoadingWithRealContent:
         )
         assert rule is not None
         assert rule.description.startswith("Ubuntu 22.04 must offload")
+
+
+@requires_content_repo
+class TestProductRuleDirectories:
+    def test_firefox_rules_are_found(self, real_content_repo):
+        # Firefox keeps its rules in products/firefox/guide, its benchmark_root
+        from content_agent.core.discovery.rules import RuleDiscovery
+
+        discovery = RuleDiscovery()
+        details = discovery.get_rule_details(
+            "firefox_policy-no_sanitize_on_shutdown", include_rendered=False
+        )
+        found = discovery.search_rules(product="firefox", limit=500)
+
+        assert details is not None
+        assert details.file_path.startswith("products/firefox/guide/")
+        assert len(found.items) > 30

@@ -43,10 +43,11 @@ class TestTemplateSchemaWithRealContent:
         assert {"param", "value"} <= names
 
     def test_every_templated_rule_is_read(self, real_content_repo):
-        from content_agent.core.discovery.templates import _rule_files, template_uses
+        from content_agent.core.discovery.rule_paths import rule_files
+        from content_agent.core.discovery.templates import template_uses
 
         templated = [
-            f for f in _rule_files(real_content_repo.path) if "\ntemplate:" in f.read_text()
+            f for f in rule_files(real_content_repo.path) if "\ntemplate:" in f.read_text()
         ]
         uses = template_uses(real_content_repo.path)
 

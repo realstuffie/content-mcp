@@ -15,13 +15,11 @@ from typing import Any
 
 import yaml
 
+from content_agent.core.discovery.rule_paths import rule_files
 from content_agent.core.integration import get_content_repository
 from content_agent.models import TemplateParameter, TemplateSchema, TemplateSummary
 
 logger = logging.getLogger(__name__)
-
-# Directories that hold rules. tests/ holds test fixtures and build/ build output.
-RULE_DIRS = ("linux_os", "applications", "products")
 
 # The block runs over indented and blank lines, and Jinja2 statements, which
 # rules often put at column 0 inside it
@@ -162,15 +160,6 @@ def _documented_default(description: str) -> str | None:
     return match["value"].strip().strip("\"'")
 
 
-def _rule_files(repo_path: Path) -> list[Path]:
-    files: list[Path] = []
-    for directory in RULE_DIRS:
-        root = repo_path / directory
-        if root.is_dir():
-            files.extend(root.rglob("rule.yml"))
-    return files
-
-
 def _read_template_use(rule_file: Path) -> tuple[str, _TemplateUse] | None:
     """Read the template name and vars from a rule's `template` block.
 
@@ -205,7 +194,7 @@ def _read_template_use(rule_file: Path) -> tuple[str, _TemplateUse] | None:
 
 def template_uses(repo_path: Path) -> dict[str, list[_TemplateUse]]:
     """Map each template to the rules that use it, cached until rule files change."""
-    files = _rule_files(repo_path)
+    files = rule_files(repo_path)
     signature = (len(files), max((f.stat().st_mtime for f in files), default=0.0))
     cached = _usage_cache.get(repo_path)
     if cached and cached[0] == signature:

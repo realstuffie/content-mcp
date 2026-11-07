@@ -17,7 +17,7 @@ Measured against ComplianceAsCode/content master at `f09d243` (2026-11-04):
 | Check | Upstream | This fork |
 |---|---|---|
 | `validate_control_file` on `cis_ubuntu2204` | 71 errors, 300 warnings | valid |
-| Real rules `validate_rule_yaml` reports invalid | 1060 of 2116 | 9 of 2530 |
+| Real rules `validate_rule_yaml` reports invalid | 1060 of 2116 | 9 of 2566 |
 | `search_rules(product="ubuntu2204")` | 0 rules | 639 |
 | Profiles that lose selections when parsed | 125 of 321 | 0 |
 | Products selecting `accounts_umask_interactive_users` | 3 | 10 |
@@ -26,6 +26,7 @@ Measured against ComplianceAsCode/content master at `f09d243` (2026-11-04):
 | `srg_gpos` / `nist_800_53` | 1 / 0 requirements | 203 / 1196 |
 | Rules that fail to load | 16 | 0 |
 | Rules `get_rule_details` crashes on | 6 | 0 |
+| Rules the server can find | 2530 of 2566 | 2566 (adds the 36 Firefox rules) |
 | `update_requirement_rules` on an `srg_gpos` requirement | file no longer parses | loads in the content build |
 | `update_requirement_rules` on `pcidss_4` requirement `1.2` | rewrites its nested requirements; file no longer parses | changes only `1.2` |
 | Statuses `update_requirement_rules` offers that the content build accepts | 3 of 5 | 10 of 10 |
