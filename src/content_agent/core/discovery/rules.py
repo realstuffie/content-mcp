@@ -40,11 +40,14 @@ GENERIC_SUBSTITUTIONS: dict[str, Any] = {"product": ""}
 FULL_NAME_PLACEHOLDER: dict[str, Any] = {"product": "", "full_name": "{{{ full_name }}}"}
 
 ProfileRuleIndex = dict[str, list[tuple[str, str]]]
+HiddenProfileRules = dict[str, set[str]]
 
 # Every MCP tool call creates a new RuleDiscovery, and building the profile index
 # reads every profile and control file, so the index is shared between instances.
 # It is rebuilt when a profile or control file is added, removed or modified.
-_shared_profile_indexes: dict[str, tuple[tuple[int, float], ProfileRuleIndex]] = {}
+_shared_profile_indexes: dict[
+    str, tuple[tuple[int, float], ProfileRuleIndex, HiddenProfileRules]
+] = {}
 
 
 def _profile_inputs_signature(repo_path: Path) -> tuple[int, float] | None:
@@ -69,6 +72,7 @@ class RuleDiscovery:
         self.content_repo = get_content_repository()
         self._rule_cache: dict[str, Path] | None = None
         self._profile_rule_index: dict[str, list[tuple[str, str]]] | None = None
+        self._hidden_profile_rules: HiddenProfileRules = {}
         self._product_env_cache: dict[str, dict[str, Any] | None] = {}
 
     def _product_substitutions(self, product: str) -> dict[str, Any] | None:
@@ -338,6 +342,7 @@ class RuleDiscovery:
 
         logger.info("Building profile-to-rule reverse index")
         self._profile_rule_index = {}
+        self._hidden_profile_rules = {}
 
         profile_discovery = ProfileDiscovery()
         product_rules: dict[str, set[str] | None] = {}
@@ -355,13 +360,17 @@ class RuleDiscovery:
             rule_filter=self._profile_rule_filter(),
             product_rules=known_rules,
         )
-        profiles_result = profile_discovery.list_profiles()
+        profiles_result = profile_discovery.list_profiles(include_hidden=True)
 
         for profile_summary in profiles_result.items:
             product = profile_summary.product
             profile_id = profile_summary.profile_id
 
-            for rule_id in sorted(resolver.resolve_profile(product, profile_id)):
+            selected = resolver.resolve_profile(product, profile_id)
+            if profile_summary.hidden:
+                self._hidden_profile_rules.setdefault(product, set()).update(selected)
+                continue
+            for rule_id in sorted(selected):
                 self._profile_rule_index.setdefault(rule_id, []).append((product, profile_id))
 
         logger.info(
@@ -434,21 +443,26 @@ class RuleDiscovery:
             shared = _shared_profile_indexes.get(repo_key)
             if signature is not None and shared is not None and shared[0] == signature:
                 self._profile_rule_index = shared[1]
+                self._hidden_profile_rules = shared[2]
             else:
                 self._build_profile_rule_index()
                 assert self._profile_rule_index is not None  # for mypy
                 if signature is not None:
-                    _shared_profile_indexes[repo_key] = (signature, self._profile_rule_index)
+                    _shared_profile_indexes[repo_key] = (
+                        signature,
+                        self._profile_rule_index,
+                        self._hidden_profile_rules,
+                    )
         return self._profile_rule_index
 
     def _rules_selected_by_product(self, product: str) -> set[str]:
-        """Return the rules that any profile of the product selects."""
+        """Return rules from selectable and build-only profiles of the product."""
         index = self._ensure_profile_rule_index()
         return {
             rule_id
             for rule_id, entries in index.items()
             if any(entry_product == product for entry_product, _ in entries)
-        }
+        } | self._hidden_profile_rules.get(product, set())
 
     def get_rule_product_availability(self, rule_id: str) -> RuleProductAvailability | None:
         """Determine which products include a rule and in which profiles.

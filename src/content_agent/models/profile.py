@@ -12,6 +12,7 @@ class ProfileSummary(BaseModel):
     title: str = Field(..., description="Profile title")
     description: str | None = Field(None, description="Profile description")
     product: str = Field(..., description="Product this profile belongs to")
+    hidden: bool = Field(False, description="Build-only profile, omitted from selectable profiles")
     rule_count: int | None = Field(None, description="Number of rules in profile")
 
     model_config = ConfigDict(
@@ -34,6 +35,7 @@ class ProfileDetails(BaseModel):
     title: str = Field(..., description="Profile title")
     description: str = Field(..., description="Full description")
     product: str = Field(..., description="Product identifier")
+    hidden: bool = Field(False, description="Build-only profile, omitted from selectable profiles")
     extends: str | None = Field(None, description="Parent profile if this extends another")
     selections: list[str] = Field(default_factory=list, description="Selected rule IDs")
     variables: dict[str, str] = Field(

@@ -155,7 +155,7 @@ class RuleProductAvailability(BaseModel):
     )
     products_in_profiles: dict[str, list[str]] = Field(
         default_factory=dict,
-        description="Product -> list of profile names that select this rule",
+        description="Product -> selectable profile names that select this rule; hidden profiles are omitted",
     )
     platforms: list[str] = Field(
         default_factory=list, description="Platform constraints from rule.yml"

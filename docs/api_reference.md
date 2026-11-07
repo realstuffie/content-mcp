@@ -210,12 +210,25 @@ Get parameter schema for a template.
 
 #### list_profiles
 
-List profiles for a product or all products.
+List selectable profiles for a product or all products. Hidden profiles such as
+the build's default profile are omitted unless requested.
 
 **Parameters:**
 - `product` (string, optional): Filter by product ID
+- `include_hidden` (boolean, optional, default false): Include hidden profiles
 
 **Returns:** Array of ProfileSummary objects
+
+Each summary and detail includes `hidden`. A hidden profile contributes rules
+to the benchmark or provides a base for inheritance, but does not produce a
+selectable XCCDF profile. `get_product_details.profiles` and `cac://profiles`
+list only selectable profiles. An explicit detail lookup can still read a
+hidden profile. The server reads the `hidden` field and does not infer it from
+the filename.
+
+Visibility follows the content build's loader. That loader keeps YAML boolean
+scalars as text, so even `hidden: false` is a nonempty value and hides a profile.
+An absent, null, empty, or numeric zero value leaves it selectable.
 
 #### get_profile_details
 
@@ -502,6 +515,9 @@ Check which products include a given rule, via identifiers, profile selections, 
 - `rule_id` (string, required): Rule identifier
 
 **Returns:** RuleProductAvailability object
+
+`products_in_profiles` lists only selectable profiles. Product-filtered rule
+searches still include rules contributed by hidden profiles to the benchmark.
 
 `has_build_artifacts` contains only the built products checked for this rule.
 An entry is true when the server can load

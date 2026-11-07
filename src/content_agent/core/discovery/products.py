@@ -194,17 +194,9 @@ class ProductDiscovery:
         Returns:
             List of profile IDs
         """
-        profiles_dir = self.content_repo.path / "products" / product_id / "profiles"
+        from content_agent.core.discovery.profiles import ProfileDiscovery
 
-        if not profiles_dir.exists():
-            return []
-
-        profile_ids = []
-        for profile_file in profiles_dir.glob("*.profile"):
-            profile_id = profile_file.stem
-            profile_ids.append(profile_id)
-
-        return sorted(profile_ids)
+        return [p.profile_id for p in ProfileDiscovery().list_profiles(product_id).items]
 
     def _calculate_product_stats(self, product_id: str) -> ProductStats | None:
         """Calculate statistics for a product.

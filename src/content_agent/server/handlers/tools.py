@@ -123,14 +123,19 @@ TOOLS = [
     },
     {
         "name": "list_profiles",
-        "description": "List profiles for a product or all products",
+        "description": "List selectable profiles for a product or all products. Hidden build-only profiles are omitted unless include_hidden is true.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "product": {
                     "type": "string",
                     "description": "Optional product filter",
-                }
+                },
+                "include_hidden": {
+                    "type": "boolean",
+                    "description": "Include hidden build-only profiles (default: false)",
+                    "default": False,
+                },
             },
             "required": [],
         },
@@ -517,7 +522,7 @@ TOOLS = [
     },
     {
         "name": "get_rule_product_availability",
-        "description": "Check products through rule identifiers and profile selections. has_build_artifacts checks readable build/<product>/rules/<rule_id>.json in detected build directories; OVAL or remediation files alone do not make it true. Omitted products have no reported result, and the flag does not report datastream presence.",
+        "description": "Check products through rule identifiers and selectable profile memberships. has_build_artifacts checks readable build/<product>/rules/<rule_id>.json in detected build directories; OVAL or remediation files alone do not make it true. Omitted products have no reported result, and the flag does not report datastream presence.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -788,7 +793,9 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
 
         elif name == "list_profiles":
             product = arguments.get("product")
-            discovery_result = discovery.list_profiles(product=product)
+            discovery_result = discovery.list_profiles(
+                product=product, include_hidden=arguments.get("include_hidden", False)
+            )
             result = [p.model_dump(mode="json") for p in discovery_result.items]
             text = json.dumps(result, indent=2)
             if discovery_result.errors:

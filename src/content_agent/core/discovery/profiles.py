@@ -19,11 +19,14 @@ class ProfileDiscovery:
         """Initialize profile discovery."""
         self.content_repo = get_content_repository()
 
-    def list_profiles(self, product: str | None = None) -> DiscoveryResult[ProfileSummary]:
+    def list_profiles(
+        self, product: str | None = None, include_hidden: bool = False
+    ) -> DiscoveryResult[ProfileSummary]:
         """List profiles for a product or all products.
 
         Args:
             product: Optional product filter
+            include_hidden: Include build-only profiles omitted from XCCDF profiles
 
         Returns:
             DiscoveryResult with ProfileSummary items and any parse errors
@@ -56,7 +59,8 @@ class ProfileDiscovery:
                     summary = self._load_profile_summary(
                         profile_file.stem, product_id, profile_file
                     )
-                    result.items.append(summary)
+                    if include_hidden or not summary.hidden:
+                        result.items.append(summary)
                 except Exception as e:
                     error_msg = f"Failed to load profile {profile_file.stem}: {e}"
                     logger.warning(error_msg)
@@ -108,6 +112,7 @@ class ProfileDiscovery:
             title=data.get("title", profile_id),
             description=data.get("description", ""),
             product=product,
+            hidden=data["hidden"],
             extends=data.get("extends"),
             selections=selections,
             variables=variables,
@@ -147,6 +152,7 @@ class ProfileDiscovery:
             title=data.get("title", profile_id),
             description=(data.get("description") or "")[:200],  # Truncate
             product=product,
+            hidden=data["hidden"],
             rule_count=len(selections),
         )
 
@@ -169,6 +175,7 @@ class ProfileDiscovery:
             "variables": {},
             "controls": None,
             "filter_rules": None,
+            "hidden": False,
         }
 
         lines = content.split("\n")
@@ -186,6 +193,11 @@ class ProfileDiscovery:
             # Parse key-value pairs
             if line.startswith("documentation_complete:"):
                 continue
+            elif line.startswith("hidden:"):
+                value = yaml.safe_load(line)["hidden"]
+                # SSG keeps YAML booleans as nonempty strings, including false.
+                data["hidden"] = isinstance(value, bool) or bool(value)
+                current_section = None
             elif line.startswith("title:"):
                 data["title"] = line.split(":", 1)[1].strip().strip("'\"")
             elif line.startswith("description:"):
@@ -246,17 +258,20 @@ class ProfileDiscovery:
         return data
 
 
-def list_profiles(product: str | None = None) -> DiscoveryResult[ProfileSummary]:
+def list_profiles(
+    product: str | None = None, include_hidden: bool = False
+) -> DiscoveryResult[ProfileSummary]:
     """List profiles for a product or all products.
 
     Args:
         product: Optional product filter
+        include_hidden: Include build-only profiles omitted from XCCDF profiles
 
     Returns:
         DiscoveryResult with ProfileSummary items and any parse errors
     """
     discovery = ProfileDiscovery()
-    return discovery.list_profiles(product)
+    return discovery.list_profiles(product, include_hidden=include_hidden)
 
 
 def get_profile_details(profile_id: str, product: str) -> ProfileDetails | None:

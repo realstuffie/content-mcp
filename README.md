@@ -20,7 +20,7 @@ Measured against ComplianceAsCode/content master at `f09d243` (2026-11-04):
 | Real rules `validate_rule_yaml` reports invalid | 1060 of 2116 | 0 of 2566 |
 | `search_rules(product="ubuntu2204")` | 0 rules | 639 |
 | Profiles that lose selections when parsed | 125 of 321 | 0 |
-| Products selecting `accounts_umask_interactive_users` | 3 | 11 |
+| Products selecting `accounts_umask_interactive_users` in selectable profiles | 3 | 10 |
 | `stig_rhel9` | fails to parse | 448 requirements |
 | `pcidss_4` | 72 requirements | 351 |
 | `srg_gpos` / `nist_800_53` | 1 / 0 requirements | 203 / 1196 |
@@ -40,6 +40,10 @@ Measured against ComplianceAsCode/content master at `f09d243` (2026-11-04):
 
 Other changes:
 
+- Profile listings now omit hidden profiles, including build-only defaults. At
+  `f09d243`, the 321 source profiles contain 291 selectable profiles and 30 hidden
+  ones. `list_profiles(include_hidden=true)` includes them for inspection, and
+  profile details report `hidden`. Hidden profiles' rules remain searchable.
 - `has_build_artifacts` now describes the rendered rule JSON check it performs.
   OVAL or remediation files alone do not make an entry true, and an omitted
   product has no reported result.
