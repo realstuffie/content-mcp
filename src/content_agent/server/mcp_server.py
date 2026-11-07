@@ -6,6 +6,7 @@ from typing import Any
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Resource, Tool
+from pydantic import AnyUrl
 
 from content_agent.server.handlers import prompts, resources, tools
 
@@ -41,10 +42,10 @@ class ContentAgentServer:
 
         # Read resource handler
         @self.server.read_resource()
-        async def handle_read_resource(uri: str) -> str:
+        async def handle_read_resource(uri: AnyUrl) -> str:
             """Handle read resource request."""
             logger.debug(f"Reading resource: {uri}")
-            return await resources.handle_resource_read(uri)
+            return await resources.handle_resource_read(str(uri))
 
         # List tools handler
         @self.server.list_tools()

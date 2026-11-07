@@ -4,6 +4,8 @@
 
 Resources provide read-only access to content via URI.
 
+The server accepts the SDK's URI objects when a client calls resources/read.
+
 ### Products
 
 **List all products**

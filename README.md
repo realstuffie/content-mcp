@@ -41,6 +41,9 @@ Measured against ComplianceAsCode/content master at `f09d243` (2026-11-04):
 Other changes:
 
 - `mcp` is capped below 2.0, because 2.x crashes the server on startup.
+- Resource reads now accept the SDK's URI objects, so clients can read
+  collections and product details through MCP.
+  The [protocol design record](openspec/changes/archive/2026-11-07-test-mcp-protocol/design.md) describes these fixes.
 - AI requests work with anthropic SDK 2.x, and the default model is `claude-sonnet-5-5`, replacing the retired `claude-3-5-sonnet-20241022`.
 - The profile index is shared between tool calls, so `get_rule_product_availability` takes about 0.1 seconds after the first call instead of about 15.
 - The product list is shared between tool calls too, so control tools that take a product, like `get_requirement_file_path`, answer in about 1 ms instead of 55 to 65.
