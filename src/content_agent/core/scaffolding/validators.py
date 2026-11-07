@@ -38,11 +38,11 @@ def _expand_rule_jinja(yaml_content: str) -> Any | None:
 
 
 def _restore_fields_lost_in_expansion(data: Any, yaml_content: str, fields: set[str]) -> Any:
-    """Put back required fields that Jinja2 expansion removed or emptied.
+    """Put back required fields that Jinja2 expansion emptied.
 
-    ssg's loader removes documentation_complete while expanding, and a field whose
-    value is only a macro, such as {{{ describe_timer_enable(...) }}}, can expand to
-    nothing without a product. A field the raw content defines counts as present.
+    A field whose value is only a macro, such as {{{ describe_timer_enable(...) }}},
+    can expand to nothing without a product. A field the raw content defines
+    counts as present.
     """
     if not isinstance(data, dict):
         return data
@@ -50,15 +50,56 @@ def _restore_fields_lost_in_expansion(data: Any, yaml_content: str, fields: set[
     for field in fields:
         if restored.get(field):
             continue
-        match = re.search(rf"^{re.escape(field)}:[ \t]*(.*)$", yaml_content, re.MULTILINE)
-        if match is None:
-            continue
-        value = match.group(1).strip()
-        if field == "documentation_complete" and value:
-            restored[field] = yaml.safe_load(value)
-        else:
+        if re.search(rf"^{re.escape(field)}:", yaml_content, re.MULTILINE):
             restored[field] = "(set by Jinja2)"
     return restored
+
+
+# ComplianceAsCode's YAML loader keeps booleans as text, and the build skips a rule
+# only when documentation_complete is exactly "false"
+_DOCUMENTATION_COMPLETE = re.compile(
+    r"^documentation_complete:[ \t]*(?P<value>[^#\n]*?)[ \t]*(?:#.*)?$", re.MULTILINE
+)
+_YAML_TRUE = {"y", "yes", "on", "true"}
+_YAML_FALSE = {"n", "no", "off", "false"}
+
+
+def _check_documentation_complete(yaml_content: str) -> list[ValidationError]:
+    """Warn when documentation_complete won't do what its author likely means.
+
+    The field is optional, and a rule without it is complete. With the exact text
+    `false`, the content build leaves the rule out unless it is a Debug build. Any
+    other value, including `False` or `no`, counts as complete.
+    """
+    match = _DOCUMENTATION_COMPLETE.search(yaml_content)
+    if match is None:
+        return []
+    # Quoted or not, the build compares the scalar's text
+    value = match["value"].strip("'\"")
+    if value == "true":
+        return []
+    if value == "false":
+        return [
+            ValidationError(
+                field="documentation_complete",
+                error="documentation_complete is false, so the content build leaves this "
+                "rule out, except in Debug builds",
+                suggestion="Set it to true, or remove it, when the rule is ready",
+            )
+        ]
+    if value.lower() in _YAML_FALSE:
+        error = (
+            f"The content build treats only the text false as incomplete; "
+            f"'{match['value']}' counts as complete"
+        )
+        suggestion = "Write false to leave the rule out of the build"
+    elif value.lower() in _YAML_TRUE:
+        error = f"'{match['value']}' works, but rules write true"
+        suggestion = "Write true"
+    else:
+        error = f"documentation_complete is '{match['value']}'; the build counts it as complete"
+        suggestion = "Use true or false"
+    return [ValidationError(field="documentation_complete", error=error, suggestion=suggestion)]
 
 
 class RuleValidator:
@@ -67,8 +108,9 @@ class RuleValidator:
     # Valid severity values
     VALID_SEVERITIES = {"low", "medium", "high", "unknown"}
 
-    # Required top-level fields
-    REQUIRED_FIELDS = {"documentation_complete", "title", "description"}
+    # Required top-level fields. documentation_complete is optional: the content
+    # build treats a rule without it as complete.
+    REQUIRED_FIELDS = {"title", "description"}
 
     # Optional but recommended fields
     RECOMMENDED_FIELDS = {"rationale", "severity", "references"}
@@ -156,6 +198,7 @@ class RuleValidator:
 
             # Check for common mistakes
             warnings.extend(self._check_common_mistakes(data))
+            warnings.extend(_check_documentation_complete(yaml_content))
 
         except yaml.YAMLError as e:
             errors.append(

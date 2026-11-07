@@ -17,7 +17,7 @@ Measured against ComplianceAsCode/content master at `f09d243` (2026-11-04):
 | Check | Upstream | This fork |
 |---|---|---|
 | `validate_control_file` on `cis_ubuntu2204` | 71 errors, 300 warnings | valid |
-| Real rules `validate_rule_yaml` reports invalid | 1060 of 2116 | 9 of 2566 |
+| Real rules `validate_rule_yaml` reports invalid | 1060 of 2116 | 0 of 2566 |
 | `search_rules(product="ubuntu2204")` | 0 rules | 639 |
 | Profiles that lose selections when parsed | 125 of 321 | 0 |
 | Products selecting `accounts_umask_interactive_users` | 3 | 10 |
@@ -34,8 +34,6 @@ Measured against ComplianceAsCode/content master at `f09d243` (2026-11-04):
 | Statuses `update_requirement_rules` offers that the content build accepts | 3 of 5 | 10 of 10 |
 | Templates `get_template_schema` gives parameters for | 0 of 65 | 59 |
 | Templates with a description or an example | 0 of 65 | 49 / 58 |
-
-The 9 rules still reported invalid are OpenShift rules without a `documentation_complete` line. The validator requires it; the content build doesn't.
 
 Other changes:
 

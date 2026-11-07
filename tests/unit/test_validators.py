@@ -36,9 +36,10 @@ title: Test Rule
         assert result.valid is False
         assert len(result.errors) > 0
 
-        # Check that missing fields are reported
+        # Check that missing fields are reported. documentation_complete is optional,
+        # as in the content build.
         error_fields = [e.field for e in result.errors]
-        assert "documentation_complete" in error_fields
+        assert "documentation_complete" not in error_fields
         assert "description" in error_fields
 
     def test_invalid_severity(self):
@@ -261,3 +262,46 @@ references:
 
         # Should have fewer warnings without reference checking
         assert len(nist_warnings1) > len(nist_warnings2)
+
+
+class TestDocumentationComplete:
+    """documentation_complete is checked the way the content build reads it."""
+
+    RULE = "title: Test Rule\ndescription: A test rule\nrationale: Why\nseverity: medium\n"
+
+    def _messages(self, line: str) -> tuple[bool, list[str]]:
+        result = RuleValidator().validate_yaml(line + self.RULE)
+        doc = [w.error for w in result.warnings if w.field == "documentation_complete"]
+        return result.valid, doc
+
+    def test_missing_is_complete(self):
+        assert self._messages("") == (True, [])
+
+    def test_true(self):
+        assert self._messages("documentation_complete: true\n") == (True, [])
+
+    def test_true_with_comment(self):
+        line = "documentation_complete: true # switch to true when ready\n"
+        assert self._messages(line) == (True, [])
+
+    def test_false_leaves_the_rule_out(self):
+        valid, messages = self._messages("documentation_complete: false\n")
+        assert valid is True
+        assert len(messages) == 1
+        assert "leaves this rule out" in messages[0]
+
+    def test_quoted_false_leaves_the_rule_out(self):
+        valid, messages = self._messages("documentation_complete: 'false'\n")
+        assert valid is True
+        assert len(messages) == 1 and "leaves this rule out" in messages[0]
+
+    def test_other_false_spellings_count_as_complete(self):
+        for value in ("False", "no", "off"):
+            valid, messages = self._messages(f"documentation_complete: {value}\n")
+            assert valid is True
+            assert len(messages) == 1 and "counts as complete" in messages[0], value
+
+    def test_other_true_spellings(self):
+        valid, messages = self._messages("documentation_complete: yes\n")
+        assert valid is True
+        assert messages == ["'yes' works, but rules write true"]
