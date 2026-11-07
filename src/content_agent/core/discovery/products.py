@@ -2,6 +2,7 @@
 
 import copy
 import logging
+import re
 from pathlib import Path
 
 import yaml
@@ -10,6 +11,33 @@ from content_agent.core.integration import get_content_repository, get_ssg_modul
 from content_agent.models import DiscoveryResult, ProductDetails, ProductStats, ProductSummary
 
 logger = logging.getLogger(__name__)
+
+# The pattern ssg.utils.parse_name uses: a name, then the version digits at the end
+_PRODUCT_NAME_PARSER = re.compile(r"(.+?)([0-9]+)$")
+
+
+def product_name_and_version(product_id: str) -> tuple[str, str | None]:
+    """Split a product ID into name and version, as ssg.utils.parse_name does.
+
+    rhel9 is ("rhel", "9") and ubuntu2404 is ("ubuntu", "2404"). Products
+    without a version, such as fedora or firefox, give (product_id, None).
+    product.yml has no field for either.
+    """
+    match = _PRODUCT_NAME_PARSER.match(product_id)
+    if match is None:
+        return product_id, None
+    return match.group(1), match.group(2)
+
+
+def _first_cpe(data: dict) -> str | None:
+    """Return the name of the first CPE in a product.yml `cpes` list."""
+    for entry in data.get("cpes") or []:
+        if isinstance(entry, dict):
+            for cpe in entry.values():
+                if isinstance(cpe, dict) and cpe.get("name"):
+                    return str(cpe["name"])
+    return None
+
 
 # Product lists per products directory, with the signature of its product.yml files
 _product_list_cache: dict[Path, tuple[tuple[tuple[str, int], ...], DiscoveryResult]] = {}
@@ -113,16 +141,17 @@ class ProductDiscovery:
         # Determine benchmark root
         benchmark_root = self._get_benchmark_root(data)
 
+        name_and_version = product_name_and_version(product_id)
         details = ProductDetails(
             product_id=product_id,
             name=data.get("full_name", product_id),
-            product_type=data.get("product_type", "unknown"),
-            version=data.get("product_version"),
+            product_type=data.get("product_type") or name_and_version[0],
+            version=data.get("product_version") or name_and_version[1],
             description=data.get("description"),
             profiles=profiles,
             benchmark_root=benchmark_root,
             product_dir=str(product_dir.relative_to(self.content_repo.path)),
-            cpe=data.get("cpe"),
+            cpe=data.get("cpe") or _first_cpe(data),
             stats=stats,
         )
 
@@ -147,11 +176,12 @@ class ProductDiscovery:
         with open(product_yml) as f:
             data = yaml.safe_load(f)
 
+        name_and_version = product_name_and_version(product_id)
         return ProductSummary(
             product_id=product_id,
             name=data.get("full_name", product_id),
-            product_type=data.get("product_type", "unknown"),
-            version=data.get("product_version"),
+            product_type=data.get("product_type") or name_and_version[0],
+            version=data.get("product_version") or name_and_version[1],
             description=data.get("description"),
         )
 

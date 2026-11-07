@@ -60,3 +60,28 @@ class TestControlsDirSetting:
 
         assert controls_dir_setting(control_file) == {}
         assert controls_dir_setting(tmp_path / "missing.yml") == {}
+
+
+class TestProductNameAndVersion:
+    def test_split_like_ssg_parse_name(self):
+        from content_agent.core.discovery.products import product_name_and_version
+
+        assert product_name_and_version("rhel9") == ("rhel", "9")
+        assert product_name_and_version("ubuntu2404") == ("ubuntu", "2404")
+        assert product_name_and_version("al2023") == ("al", "2023")
+        assert product_name_and_version("fedora") == ("fedora", None)
+
+    def test_product_details(self, initialized_content_repo):
+        product_yml = initialized_content_repo.path / "products" / "rhel9" / "product.yml"
+        product_yml.write_text(
+            "product: rhel9\nfull_name: Red Hat Enterprise Linux 9\ntype: platform\n"
+            "cpes:\n  - rhel9:\n      name: 'cpe:/o:redhat:enterprise_linux:9'\n"
+        )
+
+        details = ProductDiscovery().get_product_details("rhel9")
+        summary = ProductDiscovery().list_products().items[0]
+
+        assert details is not None
+        assert (details.product_type, details.version) == ("rhel", "9")
+        assert details.cpe == "cpe:/o:redhat:enterprise_linux:9"
+        assert (summary.product_type, summary.version) == ("rhel", "9")

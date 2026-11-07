@@ -27,6 +27,7 @@ Measured against ComplianceAsCode/content master at `f09d243` (2026-11-04):
 | Policies whose requirement count matches the content build | 47 of 70 | 70 of 70 |
 | Rules the `ocp4` CIS profile selects | 0 | 96 |
 | Profiles whose `filter_rules` are applied | 0 of 23 | 23 of 23 |
+| Products with a type and version | `unknown` for all 40 | all 40, as `ssg.utils.parse_name` splits them |
 | `get_control_details("nist_800_53")` without a product | uses RHEL 9's file without saying so | asks which of the 4 products |
 | Rules that fail to load | 16 | 0 |
 | Rules `get_rule_details` crashes on | 6 | 0 |
@@ -57,7 +58,6 @@ Known gaps:
 
 - The server still needs porting to MCP SDK 2.x.
 - `update_requirement_rules` refuses requirements whose rules use Jinja2 conditionals, such as two in `srg_gpos`. Those need a manual edit.
-- `get_product_details` reports every product type as `unknown`.
 
 Not maintained, on purpose:
 
