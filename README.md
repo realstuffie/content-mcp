@@ -42,6 +42,7 @@ Other changes:
 - `mcp` is capped below 2.0, because 2.x crashes the server on startup.
 - AI requests work with anthropic SDK 2.x, and the default model is `claude-sonnet-5-5`, replacing the retired `claude-3-5-sonnet-20241022`.
 - The profile index is shared between tool calls, so `get_rule_product_availability` takes about 0.1 seconds after the first call instead of about 15.
+- The product list is shared between tool calls too, so control tools that take a product, like `get_requirement_file_path`, answer in about 1 ms instead of 55 to 65.
 - `jinja2` is a declared dependency, because ComplianceAsCode's `ssg` modules import it.
 - Deprecated dependencies and APIs are replaced: `pypdf` replaces the deprecated `PyPDF2`, the models use Pydantic 2's `ConfigDict`, and timestamps no longer use `datetime.utcnow()`. The only warnings left in the test run come from Jinja2 escapes in ComplianceAsCode's own macros.
 - CI runs the integration tests on Python 3.11 to 3.14 against a pinned content commit, and a weekly job runs them against content master. The [CI design record](openspec/changes/archive/2026-11-07-ci-real-content/design.md) explains why.
@@ -57,7 +58,6 @@ Known gaps:
 - The server still needs porting to MCP SDK 2.x.
 - `update_requirement_rules` refuses requirements whose rules use Jinja2 conditionals, such as two in `srg_gpos`. Those need a manual edit.
 - `get_product_details` reports every product type as `unknown`.
-- Control tools that take a product confirm it by loading every `product.yml` on each call, about 0.2 seconds a call.
 
 Not maintained, on purpose:
 

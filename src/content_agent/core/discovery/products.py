@@ -1,5 +1,6 @@
 """Product discovery implementation."""
 
+import copy
 import logging
 from pathlib import Path
 
@@ -9,6 +10,19 @@ from content_agent.core.integration import get_content_repository, get_ssg_modul
 from content_agent.models import DiscoveryResult, ProductDetails, ProductStats, ProductSummary
 
 logger = logging.getLogger(__name__)
+
+# Product lists per products directory, with the signature of its product.yml files
+_product_list_cache: dict[Path, tuple[tuple[tuple[str, int], ...], DiscoveryResult]] = {}
+
+
+def _product_files_signature(products_dir: Path) -> tuple[tuple[str, int], ...]:
+    """Name and modification time of every product.yml, to tell when the list changes."""
+    return tuple(
+        sorted(
+            (path.parent.name, path.stat().st_mtime_ns)
+            for path in products_dir.glob("*/product.yml")
+        )
+    )
 
 
 class ProductDiscovery:
@@ -34,6 +48,13 @@ class ProductDiscovery:
             logger.error(f"Products directory not found: {products_dir}")
             return result
 
+        # Every control tool that takes a product lists products to check it, so
+        # reuse the list until a product.yml is added, removed or changed
+        signature = _product_files_signature(products_dir)
+        cached = _product_list_cache.get(products_dir)
+        if cached is not None and cached[0] == signature:
+            return copy.deepcopy(cached[1])
+
         for product_dir in products_dir.iterdir():
             if not product_dir.is_dir():
                 continue
@@ -52,6 +73,7 @@ class ProductDiscovery:
 
         result.items.sort(key=lambda p: p.product_id)
         logger.info(f"Found {len(result.items)} products")
+        _product_list_cache[products_dir] = (signature, copy.deepcopy(result))
         return result
 
     def get_product_details(self, product_id: str) -> ProductDetails | None:

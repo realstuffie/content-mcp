@@ -11,6 +11,7 @@ import yaml
 
 from content_agent.core.discovery.controls import (
     GENERIC_SUBSTITUTIONS,
+    controls_dir_setting,
     find_requirement_file,
     load_control_yaml,
     requirements_directory,
@@ -36,7 +37,6 @@ _ID_PATTERN = re.compile(
 )
 _KEY_PATTERN = re.compile(r"^(?P<indent> *)(?P<key>[A-Za-z_][\w-]*):(?:\s|$)")
 _JINJA_STATEMENT = re.compile(r"^\s*\{\{?%")
-_CONTROLS_DIR_PATTERN = re.compile(r"^controls_dir:\s*['\"]?(?P<subdir>[^'\"\s#]+)", re.MULTILINE)
 
 
 class _UpdateRefused(Exception):
@@ -139,7 +139,7 @@ class ControlUpdater:
             return self._failure(Path("."), self._missing_control_message(control_id, product))
 
         substitutions = self._substitutions(product)
-        data = self._load_control_file(control_file, substitutions)
+        data = controls_dir_setting(control_file)
         found = find_requirement_file(control_file, data, requirement_id)
         if found is None:
             directory = requirements_directory(control_file, data)
@@ -149,19 +149,6 @@ class ControlUpdater:
             )
 
         return self._update_file(found[0], requirement_id, rules, status, substitutions)
-
-    def _load_control_file(self, control_file: Path, substitutions: dict[str, Any]) -> Any:
-        """Parse a control file, or read only its `controls_dir` if it doesn't parse.
-
-        The text fallback lets an update go ahead; the edit check then reports
-        that the file doesn't parse.
-        """
-        try:
-            return load_control_yaml(control_file, substitutions)
-        except Exception as e:
-            logger.debug(f"Could not parse {control_file}: {e}")
-            match = _CONTROLS_DIR_PATTERN.search(control_file.read_text())
-            return {"controls_dir": match["subdir"]} if match else {}
 
     def _missing_control_message(self, control_id: str, product: str | None) -> str:
         message = f"Control file not found: {control_id}"

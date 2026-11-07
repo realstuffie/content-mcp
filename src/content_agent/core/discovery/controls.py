@@ -31,6 +31,23 @@ GENERIC_SUBSTITUTIONS: dict[str, Any] = {
 }
 
 
+_CONTROLS_DIR_LINE = re.compile(r"^controls_dir:\s*['\"]?(?P<subdir>[^'\"\s#]+)", re.MULTILINE)
+
+
+def controls_dir_setting(control_file: Path) -> dict[str, str]:
+    """Read a control file's `controls_dir` from its text, as {"controls_dir": ...} or {}.
+
+    Finding a requirement's file needs only this one setting, and reading the line
+    is much faster than expanding and parsing the whole file.
+    """
+    try:
+        match = _CONTROLS_DIR_LINE.search(control_file.read_text())
+    except OSError as e:
+        logger.debug(f"Could not read {control_file}: {e}")
+        return {}
+    return {"controls_dir": match["subdir"]} if match else {}
+
+
 def requirements_directory(control_file: Path, data: Any) -> Path | None:
     """Return the directory holding a policy's requirement files, if it has one.
 
@@ -671,16 +688,7 @@ class ControlDiscovery:
             logger.warning(f"Control file not found: {control_id}")
             return None
 
-        substitutions = (self._product_substitutions(product) if product else None) or {
-            **GENERIC_SUBSTITUTIONS,
-            "product": product or "",
-        }
-        try:
-            data = load_control_yaml(control_file_path, substitutions)
-        except Exception as e:
-            logger.warning(f"Could not parse {control_file_path}: {e}")
-            data = {}
-
+        data = controls_dir_setting(control_file_path)
         found = find_requirement_file(control_file_path, data, requirement_id)
         if found is not None:
             path, file_format = found
