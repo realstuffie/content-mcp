@@ -54,6 +54,10 @@ Known gaps:
 - `get_template_schema` returns no parameters.
 - `get_product_details` reports every product type as `unknown`.
 
+Not maintained, on purpose:
+
+- The rule writing tools. An agent with file access can write a `rule.yml` itself, so this fork concentrates on reading content and validating it. `generate_rule_boilerplate` writes rules the content build rejects, with a top-level `products:` key and a placeholder CCE, and two of its default locations don't exist. `generate_rule_from_template` isn't implemented.
+
 ## Features
 
 - **Content Discovery**: Search and explore rules, profiles, products, and templates
