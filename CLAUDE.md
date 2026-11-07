@@ -22,7 +22,7 @@ pytest tests/unit/test_validators.py      # single file
 pytest tests/unit/test_validators.py::TestRuleValidator::test_valid_rule -x  # single test, stop on first failure
 ```
 
-Integration tests auto-detect a ComplianceAsCode/content repo and skip if none is found. To enable them:
+Integration tests auto-detect a ComplianceAsCode/content repo and skip if none is found. CI runs them against the content commit pinned as `CONTENT_REF` in `.github/workflows/ci.yml`, and the weekly "Content drift" workflow runs them against content master; bump the pin when that workflow passes. To enable them locally:
 ```bash
 CONTENT_REPO=/path/to/content pytest tests/integration/   # explicit path
 # or clone to ~/.content-agent/content (auto-detected)
@@ -34,7 +34,7 @@ black --check src/ tests/                 # check formatting
 black src/ tests/                         # apply formatting
 ruff check src/ tests/                    # lint
 ruff check --fix src/ tests/             # lint with auto-fix
-mypy src/                                 # type check (continue-on-error in CI)
+mypy src/                                 # type check (blocking in CI)
 ```
 
 ### Run the server
