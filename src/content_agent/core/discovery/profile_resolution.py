@@ -12,11 +12,14 @@ This follows the ComplianceAsCode build (``ssg.entities.profile`` and
   requirements, and the rules of the requirements it references.
 - ``extends`` adds the parent profile's rules, and ``!rule`` entries remove rules.
 - Variable assignments and refinements (entries containing ``=``) select nothing.
-
-Jinja in control files and ``filter_rules`` in profiles are not evaluated.
+- A profile's ``filter_rules`` expression, when a rule filter is given, keeps only
+  the rules it accepts. As in the build, it applies after ``extends`` and
+  unselections, to the parent's rules too, and the parent's own filter has
+  already applied to them.
 """
 
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from content_agent.models.control import ControlFile, ControlRequirement, flatten_requirements
@@ -33,9 +36,23 @@ def _is_rule_entry(entry: str) -> bool:
 class ProfileRuleResolver:
     """Resolve profile selections into rule IDs, caching control files per product."""
 
-    def __init__(self, profile_discovery: Any, control_discovery: Any | None = None) -> None:
+    def __init__(
+        self,
+        profile_discovery: Any,
+        control_discovery: Any | None = None,
+        rule_filter: Callable[[str, str, str], bool] | None = None,
+    ) -> None:
+        """
+        Args:
+            profile_discovery: Source of profile details
+            control_discovery: Source of control files, created when needed if None
+            rule_filter: Called with (product, rule_id, filter_rules expression);
+                returns whether the profile keeps the rule. Without it,
+                filter_rules is not applied.
+        """
         self._profiles = profile_discovery
         self._controls = control_discovery
+        self._rule_filter = rule_filter
         self._policy_cache: dict[tuple[str, str], ControlFile | None] = {}
         self._control_rules_cache: dict[tuple[str, str, str], set[str]] = {}
         self._profile_cache: dict[tuple[str, str], set[str]] = {}
@@ -76,6 +93,10 @@ class ProfileRuleResolver:
             selected |= self._resolve_profile(product, details.extends, visiting | {key})
 
         result = selected - unselected
+        expression = getattr(details, "filter_rules", None)
+        if expression and self._rule_filter is not None:
+            rule_filter = self._rule_filter
+            result = {rule for rule in result if rule_filter(product, rule, expression)}
         self._profile_cache[key] = result
         return result
 

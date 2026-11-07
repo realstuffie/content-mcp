@@ -140,3 +140,65 @@ class TestProfileSelections:
     def test_missing_profile(self):
         rules, _ = _resolve({}, "nope")
         assert rules == set()
+
+
+class FilteredProfiles:
+    """Profiles given as {id: (selections, extends, filter_rules)}."""
+
+    def __init__(self, profiles):
+        self.profiles = profiles
+
+    def get_profile_details(self, profile_id, product):
+        selections, extends, filter_rules = self.profiles[profile_id]
+        return ProfileDetails(
+            profile_id=profile_id,
+            title=profile_id,
+            description="",
+            product=product,
+            extends=extends,
+            selections=selections,
+            file_path=f"{profile_id}.profile",
+            rule_count=len(selections),
+            filter_rules=filter_rules,
+        )
+
+
+NODE_RULES = {"node_rule_a", "node_rule_b"}
+
+
+def _not_node(product, rule_id, expression):
+    # Stands in for evaluating the expression against the rule's platform
+    assert expression == "node not in platform"
+    return rule_id not in NODE_RULES
+
+
+class TestFilterRules:
+    def _resolve(self, profiles, profile_id, rule_filter=_not_node):
+        resolver = ProfileRuleResolver(
+            FilteredProfiles(profiles), FakeControls({"pol": POLICY}), rule_filter=rule_filter
+        )
+        return resolver.resolve_profile("prod", profile_id)
+
+    def test_filter_keeps_accepted_rules(self):
+        profiles = {"p": (["node_rule_a", "platform_rule"], None, "node not in platform")}
+        assert self._resolve(profiles, "p") == {"platform_rule"}
+
+    def test_filter_applies_to_inherited_rules(self):
+        profiles = {
+            "base": (["node_rule_b", "platform_rule"], None, None),
+            "p": (["other_rule"], "base", "node not in platform"),
+        }
+        assert self._resolve(profiles, "p") == {"platform_rule", "other_rule"}
+        assert self._resolve(profiles, "base") == {"node_rule_b", "platform_rule"}
+
+    def test_parent_filter_still_applies_when_child_has_none(self):
+        profiles = {
+            "base": (["node_rule_b", "platform_rule"], None, "node not in platform"),
+            "p": (["node_rule_a"], "base", None),
+        }
+        # The child's own node rule stays; the parent's was filtered out
+        assert self._resolve(profiles, "p") == {"platform_rule", "node_rule_a"}
+
+    def test_without_a_filter_function_nothing_is_filtered(self):
+        profiles = {"p": (["node_rule_a", "platform_rule"], None, "node not in platform")}
+        assert self._resolve(profiles, "p", rule_filter=None) == {"node_rule_a", "platform_rule"}

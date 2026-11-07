@@ -10,7 +10,7 @@ See docs/COMPLIANCEASCODE_REFERENCE.md for more details.
 """
 
 import logging
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -340,7 +340,7 @@ class RuleDiscovery:
         self._profile_rule_index = {}
 
         profile_discovery = ProfileDiscovery()
-        resolver = ProfileRuleResolver(profile_discovery)
+        resolver = ProfileRuleResolver(profile_discovery, rule_filter=self._profile_rule_filter())
         profiles_result = profile_discovery.list_profiles()
 
         for profile_summary in profiles_result.items:
@@ -353,6 +353,64 @@ class RuleDiscovery:
         logger.info(
             f"Profile rule index built: {len(self._profile_rule_index)} rules across profiles"
         )
+
+    def _profile_rule_filter(self) -> Callable[[str, str, str], bool] | None:
+        """Return a filter that applies profiles' filter_rules the way the build does.
+
+        The build evaluates the expression with ssg.utils.safe_eval_filter against
+        the rule's attributes: `platform` is the rule's platform text, or empty,
+        and `platforms` is a set that includes it. Rules are expanded with the
+        product's variables, since platforms like `{{{ product }}}-node` use Jinja2.
+        A rule that can't be loaded or evaluated is kept.
+        """
+        try:
+            get_ssg_modules()
+            import ssg.utils
+
+            evaluate = ssg.utils.safe_eval_filter
+        except Exception as e:
+            logger.info(f"Profile filter_rules not applied, ssg.utils unavailable: {e}")
+            return None
+
+        contexts: dict[tuple[str, str], dict[str, Any] | None] = {}
+
+        def context(product: str, rule_id: str) -> dict[str, Any] | None:
+            key = (product, rule_id)
+            if key not in contexts:
+                contexts[key] = self._filter_context(product, rule_id)
+            return contexts[key]
+
+        def keep(product: str, rule_id: str, expression: str) -> bool:
+            attributes = context(product, rule_id)
+            if attributes is None:
+                return True
+            try:
+                return bool(evaluate(expression, attributes))
+            except Exception as e:
+                logger.debug(f"filter_rules {expression!r} failed for {rule_id}: {e}")
+                return True
+
+        return keep
+
+    def _filter_context(self, product: str, rule_id: str) -> dict[str, Any] | None:
+        if self._rule_cache is None:
+            self._build_rule_index()
+        assert self._rule_cache is not None
+        rule_path = self._rule_cache.get(rule_id)
+        if rule_path is None:
+            return None
+        try:
+            data = self._load_rule_yaml(rule_path, product)
+        except Exception as e:
+            logger.debug(f"Could not load {rule_id} for {product}: {e}")
+            return None
+        if not isinstance(data, dict):
+            return None
+        platform = data.get("platform") or ""
+        platforms = set(data.get("platforms") or [])
+        if platform:
+            platforms.add(platform)
+        return {**data, "id_": rule_id, "platform": platform, "platforms": platforms}
 
     def _ensure_profile_rule_index(self) -> ProfileRuleIndex:
         """Return the profile index, reusing the shared one when its inputs are unchanged."""

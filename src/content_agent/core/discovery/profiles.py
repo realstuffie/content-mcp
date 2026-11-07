@@ -4,6 +4,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from content_agent.core.integration import get_content_repository
 from content_agent.models import DiscoveryResult, ProfileDetails, ProfileSummary
 
@@ -112,6 +114,7 @@ class ProfileDiscovery:
             file_path=str(profile_path.relative_to(self.content_repo.path)),
             rule_count=len(selections),
             control_file=control_file,
+            filter_rules=data.get("filter_rules"),
         )
 
         logger.debug(f"Loaded details for profile {profile_id}")
@@ -165,11 +168,13 @@ class ProfileDiscovery:
             "selections": [],
             "variables": {},
             "controls": None,
+            "filter_rules": None,
         }
 
         lines = content.split("\n")
         current_section = None
         description_lines = []
+        filter_lines: list[str] = []
 
         for line in lines:
             line = line.rstrip()
@@ -194,6 +199,15 @@ class ProfileDiscovery:
                 current_section = "selections"
             elif line.startswith("controls:"):
                 data["controls"] = line.split(":", 1)[1].strip()
+            elif line.startswith("filter_rules:"):
+                # Often a quoted expression continued on indented lines
+                filter_lines = [line]
+                current_section = "filter_rules"
+            elif current_section == "filter_rules":
+                if line.startswith(" ") or line.startswith("\t"):
+                    filter_lines.append(line)
+                else:
+                    current_section = None
             elif current_section == "description":
                 # Multi-line description
                 if line.startswith(" ") or line.startswith("\t"):
@@ -218,6 +232,16 @@ class ProfileDiscovery:
         # Join description lines
         if description_lines:
             data["description"] = " ".join(description_lines)
+
+        if filter_lines:
+            try:
+                parsed = yaml.safe_load("\n".join(filter_lines))
+                expression = parsed.get("filter_rules") if isinstance(parsed, dict) else None
+            except yaml.YAMLError as e:
+                logger.warning(f"Could not read filter_rules: {e}")
+                expression = None
+            if isinstance(expression, str) and expression.strip():
+                data["filter_rules"] = expression.strip()
 
         return data
 

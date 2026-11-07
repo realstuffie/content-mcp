@@ -49,3 +49,27 @@ class TestProfileSelectionParsing:
         data = _parse(content)
         assert data["selections"] == ["rule_a"]
         assert data["extends"] == "base"
+
+
+class TestFilterRulesParsing:
+    def test_single_line(self):
+        data = _parse("filter_rules: '\"kubevirt\" not in id_'\nselections:\n    - rule_a\n")
+        assert data["filter_rules"] == '"kubevirt" not in id_'
+        assert data["selections"] == ["rule_a"]
+
+    def test_continued_on_indented_lines(self):
+        content = (
+            'filter_rules: \'"ocp4-node" not in platform and "ocp4-master-node"\n'
+            "    not in platform'\n"
+            "selections:\n"
+            "    - cis_ocp_200:all\n"
+        )
+        data = _parse(content)
+        assert (
+            data["filter_rules"]
+            == '"ocp4-node" not in platform and "ocp4-master-node" not in platform'
+        )
+        assert data["selections"] == ["cis_ocp_200:all"]
+
+    def test_absent(self):
+        assert _parse("selections:\n    - rule_a\n")["filter_rules"] is None

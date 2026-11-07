@@ -44,6 +44,11 @@ class ProfileDetails(BaseModel):
     control_file: str | None = Field(
         None, description="Control file if profile is based on controls"
     )
+    filter_rules: str | None = Field(
+        None,
+        description="Expression the build uses to keep only some selected rules, "
+        "such as '\"ocp4-node\" not in platform'",
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
