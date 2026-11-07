@@ -221,6 +221,21 @@ Available fixtures (see `conftest.py`):
 
 Additionally, `requires_content_repo` is a `skipif` marker importable from `tests.conftest` that skips tests when no real content repo is available.
 
+`initialized_content_repo` restores `sys.path` and the previous `ssg` and
+`ssg.*` entries in `sys.modules` after each test. Imports from a mock repository's
+empty `ssg/` directory must not leave a namespace package cached for the next
+integration test. Existing real SSG modules keep their identities.
+
+`unit/test_fixture_import_isolation.py` runs a child pytest process with a mock
+repository before a regular SSG package. It also checks a mock fixture after
+real imports, including submodule replacement and a test's own monkeypatch path
+edits. The child process uses temporary package files and needs no external
+content checkout. To check the whole suite in unit-first order:
+
+```bash
+CONTENT_REPO=/path/to/content pytest tests/unit tests/integration -q
+```
+
 ## Coverage Goals
 
 - Overall: > 80%

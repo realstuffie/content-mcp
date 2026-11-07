@@ -1,6 +1,7 @@
 """Pytest configuration and fixtures."""
 
 import os
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -179,24 +180,32 @@ product_type: rhel
 @pytest.fixture
 def initialized_content_repo(mock_content_repo, monkeypatch):
     """Initialize the content repository with mock data."""
-    # Initialize settings first
-    initialize_settings()
-
-    # Initialize the content repository with the mock repo path
-    repo = initialize_content_repository(mock_content_repo)
-
-    # Mock SSG modules since they won't be available in the test environment
-    import content_agent.core.integration.ssg_modules as sm
-
-    mock_ssg = MagicMock()
-    sm._ssg_modules = mock_ssg
-
-    yield repo
-
-    # Cleanup: Reset the global instances
     import content_agent.config.settings as settings_module
     import content_agent.core.integration.content_manager as cm
+    import content_agent.core.integration.ssg_modules as sm
 
-    settings_module._settings = None
-    cm._content_repo = None
-    sm._ssg_modules = None
+    previous_ssg = {
+        name: module
+        for name, module in sys.modules.copy().items()
+        if name == "ssg" or name.startswith("ssg.")
+    }
+    previous_path = list(sys.path)
+    # Use the shared monkeypatch so a test's later path edits undo to the same
+    # starting state, rather than restoring the mock path after our teardown.
+    monkeypatch.syspath_prepend(str(mock_content_repo.resolve()))
+    try:
+        initialize_settings()
+        repo = initialize_content_repository(mock_content_repo)
+        sm._ssg_modules = MagicMock()
+        yield repo
+    finally:
+        sys.path[:] = previous_path
+        settings_module._settings = None
+        cm._content_repo = None
+        sm._ssg_modules = None
+        # An empty ssg/ directory can become a cached namespace package.
+        # Remove temporary imports and restore any preloaded real modules.
+        for name in tuple(sys.modules):
+            if name == "ssg" or name.startswith("ssg."):
+                sys.modules.pop(name, None)
+        sys.modules.update(previous_ssg)
