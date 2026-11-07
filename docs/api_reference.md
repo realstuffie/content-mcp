@@ -13,6 +13,8 @@ Resource reads declare application/json and preserve the requested URI.
 resources/list returns concrete collection URIs. Parameterized URIs appear in
 resources/templates/list.
 
+Rendered-rule URIs reject path segments after the rule ID.
+
 ### Products
 
 **List all products**

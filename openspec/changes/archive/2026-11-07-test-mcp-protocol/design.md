@@ -39,6 +39,16 @@ Keep the six collection URIs in resources/list and register the six
 parameterized descriptors as resource templates. A session test checks
 both discovery responses and their MIME types.
 
+### Rendered-rule resource paths
+
+The rendered-rule resource route accepted four or more path segments
+and ignored everything after the rule ID. A URI ending in /extra
+returned the same rule as the valid URI.
+
+Require exactly four segments for a rendered-rule resource. A session
+test checks that the extra segment is rejected and the client can
+still send another request.
+
 ## Verification
 
 Each implemented fix has a regression test through an MCP session.

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from mcp.shared.exceptions import McpError
 from mcp.shared.memory import create_connected_server_and_client_session
 
 from content_agent.server.mcp_server import ContentAgentServer
@@ -141,3 +142,10 @@ async def test_resource_discovery_separates_templates(mcp_session):
         }
         for descriptor in [*listing.resources, *templates.resourceTemplates]:
             assert descriptor.mimeType == "application/json"
+
+
+async def test_rendered_resource_rejects_extra_path(mcp_session):
+    async with mcp_session as client:
+        with pytest.raises(McpError, match="Invalid build resource path"):
+            await client.read_resource(f"cac://build/rhel9/rules/{RULE}/extra")
+        await client.send_ping()

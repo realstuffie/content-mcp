@@ -16,6 +16,10 @@ resources/list included URIs such as cac://products/{product_id} as
 concrete resources. The SDK escaped their braces, and clients could
 not discover their parameters through resources/templates/list.
 
+The rendered-rule resource route accepted four or more path segments
+and ignored everything after the rule ID. A URI ending in /extra
+returned the same rule as the valid URI.
+
 ## What changes
 
 Convert the URI to a string at the server boundary. A regression test
@@ -32,6 +36,10 @@ session tests now check the URI, MIME type and JSON content of all
 Keep the six collection URIs in resources/list and register the six
 parameterized descriptors as resource templates. A session test checks
 both discovery responses and their MIME types.
+
+Require exactly four segments for a rendered-rule resource. A session
+test checks that the extra segment is rejected and the client can
+still send another request.
 
 ## Capabilities
 

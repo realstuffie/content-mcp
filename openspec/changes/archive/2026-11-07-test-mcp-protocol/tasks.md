@@ -4,3 +4,4 @@
 - [x] 2. Serialize resource timestamps as JSON values. Include its session tests and documentation.
 - [x] 3. Return JSON resources with application/json. Include its session tests and documentation.
 - [x] 4. List parameterized resources as MCP URI templates. Include its session tests and documentation.
+- [x] 5. Reject extra segments in rendered-rule resource URIs. Include its session tests and documentation.

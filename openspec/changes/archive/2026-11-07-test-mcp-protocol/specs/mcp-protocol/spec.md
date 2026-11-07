@@ -39,3 +39,13 @@ resources/list and the six parameterized URIs through resources/templates/list.
 
 - **WHEN** a client lists resources and resource templates
 - **THEN** concrete URIs contain no placeholders and parameterized descriptors use uriTemplate
+
+### Requirement: Rendered-rule resource paths
+
+A rendered-rule resource URI SHALL contain exactly four route segments.
+The server SHALL reject segments after the rule ID.
+
+#### Scenario: Rendered-rule resource paths
+
+- **WHEN** a client adds /extra after a rendered-rule ID
+- **THEN** the read fails and the same session still accepts a valid request

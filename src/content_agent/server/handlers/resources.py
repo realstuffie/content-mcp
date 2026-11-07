@@ -125,7 +125,7 @@ async def handle_resource_read(uri: str) -> str:
             if not info:
                 raise ValueError(f"No build artifacts for product: {build_product}")
             return json.dumps(info.model_dump(mode="json"), indent=2)
-        elif len(path_parts) >= 4 and path_parts[2] == "rules":
+        elif len(path_parts) == 4 and path_parts[2] == "rules":
             # Get rendered rule: build/{product}/rules/{rule_id}
             build_product = path_parts[1]
             rule_id = path_parts[3]
