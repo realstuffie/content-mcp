@@ -40,7 +40,15 @@ For control files without a `controls_dir` field, the tool SHALL locate the file
 - **THEN** the tool SHALL return a `ControlUpdateResult` with `success=False` and an error message
 
 ### Requirement: Tool locates correct file for directory-based format
-For control files with a `controls_dir` field, the tool SHALL locate the requirement file relative to the control file's parent directory (which may be in `controls/` or `products/<product>/controls/`).
+For policies with a requirement directory, the tool SHALL update the requirement in the file that defines it, found as `get_requirement_file_path` finds it: a file named after the requirement, the control file, or any other file in the directory. When the control file is not in `controls/` and no product is given, but the policy exists for some products, the error SHALL name those products.
+
+#### Scenario: Requirement in a family file
+- **WHEN** the tool is called with `control_id="nist_800_53"`, `requirement_id="ac-2"`, `product="rhel9"`
+- **THEN** the tool SHALL update `ac-2` in `products/rhel9/controls/nist_800_53/ac.yml` and leave the other requirements in the file unchanged
+
+#### Scenario: Policy defined only per product
+- **WHEN** the tool is called with `control_id="nist_800_53"` and no product
+- **THEN** the error SHALL list the products that define `nist_800_53`
 
 #### Scenario: Directory-based requirement file exists
 - **WHEN** the tool is called with `control_id="srg_gpos"` and `requirement_id="SRG-OS-000001"` and the parent file has `controls_dir: srg_gpos`

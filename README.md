@@ -55,9 +55,9 @@ The `fixes` branch holds all changes and is the default branch. `main` mirrors u
 Known gaps:
 
 - The server still needs porting to MCP SDK 2.x.
-- `get_requirement_file_path` and `update_requirement_rules` assume one requirement per file, which isn't true of the NIST 800-53 family files.
 - `update_requirement_rules` refuses requirements whose rules use Jinja2 conditionals, such as two in `srg_gpos`. Those need a manual edit.
 - `get_product_details` reports every product type as `unknown`.
+- Control tools that take a product confirm it by loading every `product.yml` on each call, about 0.2 seconds a call.
 
 Not maintained, on purpose:
 

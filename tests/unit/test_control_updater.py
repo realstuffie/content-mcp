@@ -833,3 +833,47 @@ class TestEditChecks:
         content = (tmp_path / "controls" / "test.yml").read_text()
         assert "    - rule_a" in content
         assert "status: automated" in content
+
+
+class TestSharedRequirementFiles:
+    """Requirements in files that hold several, like the NIST 800-53 family files."""
+
+    def test_update_in_family_file(self, updater: ControlUpdater, tmp_path: Path) -> None:
+        _write_directory_control(
+            tmp_path,
+            "nist",
+            """\
+            ---
+            id: nist
+            title: NIST
+            controls_dir: nist
+            """,
+            {"ac": """\
+                    controls:
+                        - id: ac-1
+                          rules: []
+                          status: pending
+                        - id: ac-2
+                          rules: []
+                          status: pending
+                """},
+        )
+
+        result = updater.update_requirement_rules("nist", "ac-2", ["rule_a"], "automated")
+
+        assert result.success, result.errors
+        assert result.file_path == tmp_path / "controls" / "nist" / "ac.yml"
+        content = result.file_path.read_text()
+        assert _requirement(content, "ac-2")["rules"] == ["rule_a"]
+        assert _requirement(content, "ac-1") == {"id": "ac-1", "rules": [], "status": "pending"}
+
+    def test_policy_defined_only_per_product(self, updater: ControlUpdater, tmp_path: Path) -> None:
+        (tmp_path / "controls").mkdir()
+        product_controls = tmp_path / "products" / "rhel9" / "controls"
+        product_controls.mkdir(parents=True)
+        (product_controls / "nist.yml").write_text("id: nist\ntitle: NIST\n")
+
+        result = updater.update_requirement_rules("nist", "ac-2", ["rule_a"])
+
+        assert not result.success
+        assert "defined per product (rhel9)" in result.errors[0]

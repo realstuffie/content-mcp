@@ -9,7 +9,12 @@ from typing import Any
 
 import yaml
 
-from content_agent.core.discovery.controls import GENERIC_SUBSTITUTIONS, load_control_yaml
+from content_agent.core.discovery.controls import (
+    GENERIC_SUBSTITUTIONS,
+    find_requirement_file,
+    load_control_yaml,
+    requirements_directory,
+)
 from content_agent.core.integration import get_content_repository
 from content_agent.core.integration.product_variables import load_product_variables
 from content_agent.core.integration.ssg_modules import get_ssg_modules
@@ -131,33 +136,46 @@ class ControlUpdater:
             control_file = candidate if candidate.exists() else None
 
         if control_file is None:
-            return self._failure(Path("."), f"Control file not found: {control_id}")
+            return self._failure(Path("."), self._missing_control_message(control_id, product))
 
         substitutions = self._substitutions(product)
-        controls_subdir = self._controls_dir(control_file, substitutions)
-        if controls_subdir:
-            req_file = control_file.parent / controls_subdir / f"{requirement_id}.yml"
-            if not req_file.exists():
-                return self._failure(req_file, f"Requirement file not found: {req_file}")
-            target = req_file
-        else:
-            target = control_file
+        data = self._load_control_file(control_file, substitutions)
+        found = find_requirement_file(control_file, data, requirement_id)
+        if found is None:
+            directory = requirements_directory(control_file, data)
+            searched = f"{control_file} or {directory}" if directory else str(control_file)
+            return self._failure(
+                control_file, f"Requirement '{requirement_id}' not found in {searched}"
+            )
 
-        return self._update_file(target, requirement_id, rules, status, substitutions)
+        return self._update_file(found[0], requirement_id, rules, status, substitutions)
 
-    def _controls_dir(self, control_file: Path, substitutions: dict[str, Any]) -> str | None:
-        """Return the control file's `controls_dir`, if it keeps requirements in one."""
+    def _load_control_file(self, control_file: Path, substitutions: dict[str, Any]) -> Any:
+        """Parse a control file, or read only its `controls_dir` if it doesn't parse.
+
+        The text fallback lets an update go ahead; the edit check then reports
+        that the file doesn't parse.
+        """
         try:
-            data = load_control_yaml(control_file, substitutions)
+            return load_control_yaml(control_file, substitutions)
         except Exception as e:
-            # Fall back to the text, so an update can still go ahead; the edit
-            # check will report that the file doesn't parse.
             logger.debug(f"Could not parse {control_file}: {e}")
             match = _CONTROLS_DIR_PATTERN.search(control_file.read_text())
-            return match["subdir"] if match else None
-        if isinstance(data, dict) and data.get("controls_dir"):
-            return str(data["controls_dir"])
-        return None
+            return {"controls_dir": match["subdir"]} if match else {}
+
+    def _missing_control_message(self, control_id: str, product: str | None) -> str:
+        message = f"Control file not found: {control_id}"
+        if product is None:
+            # Some policies, like nist_800_53, exist only per product
+            products = sorted(
+                path.parent.parent.name
+                for path in self.content_repo.path.glob(f"products/*/controls/{control_id}.yml")
+            )
+            if products:
+                message += (
+                    f". It is defined per product ({', '.join(products)}); " "pass one as product."
+                )
+        return message
 
     def _update_file(
         self,

@@ -60,3 +60,17 @@ class TestImplicitRequirementDirectories:
         assert availability is not None
         # ocp4's CIS profiles select rules only through cis_ocp_200:all and similar
         assert "cis" in availability.products_in_profiles.get("ocp4", [])
+
+
+@requires_content_repo
+class TestRequirementFileLookup:
+    def test_nist_requirement_in_family_file(self, real_content_repo):
+        from content_agent.core.discovery.controls import ControlDiscovery
+
+        result = ControlDiscovery().get_requirement_file_path(
+            "nist_800_53", "ac-2.1", product="rhel9"
+        )
+
+        assert result is not None
+        assert result.exists is True
+        assert result.file_path.name == "ac.yml"

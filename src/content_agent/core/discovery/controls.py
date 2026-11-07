@@ -1,8 +1,9 @@
 """Control framework discovery implementation."""
 
 import logging
+import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 
@@ -45,6 +46,42 @@ def requirements_directory(control_file: Path, data: Any) -> Path | None:
 def requirement_files(directory: Path) -> list[Path]:
     """Return the requirement files ComplianceAsCode reads from a policy's directory."""
     return sorted(path for path in directory.glob("*.yml") if not path.name.startswith("."))
+
+
+def find_requirement_file(
+    control_file: Path, data: Any, requirement_id: str
+) -> tuple[Path, Literal["inline", "directory"]] | None:
+    """Find the file that defines a requirement, and whether it's the control file.
+
+    A policy's requirements can be in its control file and in any file of its
+    requirement directory: NIST 800-53 keeps a family per file, so ac-2 is in
+    ac.yml. The file named after the requirement is tried first, then the control
+    file, then the other files. Files are searched as text, so Jinja2 doesn't get
+    in the way and IDs like 1.10 aren't read as numbers.
+    """
+    # `- id: X`, or an indented `id: X` in a list item whose first key is another;
+    # a policy's own top-level `id:` is never indented
+    id_line = re.compile(
+        rf"^(?:\s*-\s+|\s+)id:\s*['\"]?{re.escape(requirement_id)}['\"]?\s*(?:#.*)?$",
+        re.MULTILINE,
+    )
+    directory = requirements_directory(control_file, data)
+    named = directory / f"{requirement_id}.yml" if directory else None
+    if named is not None and named.is_file():
+        return named, "directory"
+
+    candidates: list[tuple[Path, Literal["inline", "directory"]]] = [(control_file, "inline")]
+    if directory is not None:
+        candidates.extend((path, "directory") for path in requirement_files(directory))
+    for path, file_format in candidates:
+        try:
+            text = path.read_text()
+        except OSError as e:
+            logger.debug(f"Could not read {path}: {e}")
+            continue
+        if id_line.search(text):
+            return path, file_format
+    return None
 
 
 def load_control_yaml(file_path: Path, substitutions: dict[str, Any]) -> Any:
@@ -634,35 +671,40 @@ class ControlDiscovery:
             logger.warning(f"Control file not found: {control_id}")
             return None
 
-        with open(control_file_path) as f:
-            data = yaml.safe_load(f)
+        substitutions = (self._product_substitutions(product) if product else None) or {
+            **GENERIC_SUBSTITUTIONS,
+            "product": product or "",
+        }
+        try:
+            data = load_control_yaml(control_file_path, substitutions)
+        except Exception as e:
+            logger.warning(f"Could not parse {control_file_path}: {e}")
+            data = {}
 
-        # Directory-based format: controls_dir field points to subdirectory
-        if data.get("controls_dir"):
-            req_file = control_file_path.parent / data["controls_dir"] / f"{requirement_id}.yml"
+        found = find_requirement_file(control_file_path, data, requirement_id)
+        if found is not None:
+            path, file_format = found
             return RequirementFilePath(
                 control_id=control_id,
                 requirement_id=requirement_id,
-                file_path=req_file.resolve(),
-                format="directory",
-                exists=req_file.exists(),
+                file_path=path.resolve(),
+                format=file_format,
+                exists=True,
             )
 
-        # Inline format: requirement must exist in the controls tree, at any depth
-        pending = list(data.get("controls") or [])
-        while pending:
-            req = pending.pop()
-            if not isinstance(req, dict):
-                continue
-            if req.get("id") == requirement_id:
-                return RequirementFilePath(
-                    control_id=control_id,
-                    requirement_id=requirement_id,
-                    file_path=control_file_path.resolve(),
-                    format="inline",
-                    exists=True,
-                )
-            pending.extend(req.get("controls") or [])
+        # In a directory-based policy, say where a new requirement's file would go
+        directory = requirements_directory(control_file_path, data)
+        subdir = data.get("controls_dir") if isinstance(data, dict) else None
+        if directory is None and subdir:
+            directory = control_file_path.parent / str(subdir)
+        if directory is not None:
+            return RequirementFilePath(
+                control_id=control_id,
+                requirement_id=requirement_id,
+                file_path=(directory / f"{requirement_id}.yml").resolve(),
+                format="directory",
+                exists=False,
+            )
 
         logger.debug(f"Requirement {requirement_id} not found in {control_id}")
         return None

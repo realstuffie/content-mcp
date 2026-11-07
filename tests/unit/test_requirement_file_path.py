@@ -233,3 +233,76 @@ class TestGetRequirementFilePath:
 
         assert result is not None
         assert result.file_path.is_absolute()
+
+
+class TestRequirementsInSharedFiles:
+    """Requirements in files that hold several, or in the policy's own file."""
+
+    def _lookup(self, tmp_path, control_id, requirement_id):
+        from content_agent.core.discovery.controls import ControlDiscovery
+
+        with (
+            patch("content_agent.core.discovery.controls.get_content_repository") as get_repo,
+            patch(
+                "content_agent.core.discovery.controls.get_ssg_modules",
+                side_effect=RuntimeError("SSG modules not initialized"),
+            ),
+            patch(
+                "content_agent.core.discovery.products.ProductDiscovery",
+                _mock_product_discovery([]),
+            ),
+        ):
+            get_repo.return_value.path = tmp_path
+            return ControlDiscovery().get_requirement_file_path(control_id, requirement_id)
+
+    def test_family_file(self, tmp_path):
+        # NIST 800-53 keeps a family per file: ac-2 is in ac.yml
+        controls_dir = tmp_path / "controls"
+        _write_yaml(
+            controls_dir / "nist.yml", {"id": "nist", "title": "NIST", "controls_dir": "nist"}
+        )
+        (controls_dir / "nist").mkdir()
+        (controls_dir / "nist" / "ac.yml").write_text(
+            "controls:\n    - id: ac-1\n      title: First\n    - id: ac-2\n      title: Second\n"
+        )
+        (controls_dir / "nist" / "au.yml").write_text(
+            "controls:\n    - id: au-2\n      title: Audit\n"
+        )
+
+        result = self._lookup(tmp_path, "nist", "ac-2")
+
+        assert result is not None
+        assert result.format == "directory"
+        assert result.exists is True
+        assert result.file_path == (controls_dir / "nist" / "ac.yml").resolve()
+
+    def test_requirement_in_policy_file_of_directory_policy(self, tmp_path):
+        # srg_gpos keeps its Variables requirement in srg_gpos.yml itself
+        controls_dir = tmp_path / "controls"
+        (controls_dir / "srg").mkdir(parents=True)
+        (controls_dir / "srg.yml").write_text(
+            "id: srg\ntitle: SRG\ncontrols_dir: srg\ncontrols:\n    - id: Variables\n"
+            "      title: Variables\n"
+        )
+        (controls_dir / "srg" / "SRG-1.yml").write_text("controls:\n    - id: SRG-1\n")
+
+        result = self._lookup(tmp_path, "srg", "Variables")
+
+        assert result is not None
+        assert result.format == "inline"
+        assert result.file_path == (controls_dir / "srg.yml").resolve()
+
+    def test_directory_named_after_policy_file(self, tmp_path):
+        # cis_ocp sets no controls_dir; its requirements are in controls/cis_ocp/
+        controls_dir = tmp_path / "controls"
+        _write_yaml(controls_dir / "cis.yml", {"id": "cis", "title": "CIS"})
+        (controls_dir / "cis").mkdir()
+        (controls_dir / "cis" / "section-1.yml").write_text(
+            "controls:\n    - id: '1'\n      controls:\n          - id: '1.1'\n"
+        )
+
+        result = self._lookup(tmp_path, "cis", "1.1")
+
+        assert result is not None
+        assert result.format == "directory"
+        assert result.file_path == (controls_dir / "cis" / "section-1.yml").resolve()

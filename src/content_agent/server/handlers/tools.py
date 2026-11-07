@@ -553,7 +553,7 @@ TOOLS = [
     },
     {
         "name": "get_requirement_file_path",
-        "description": "Resolve the filesystem path for a specific requirement in a control file. Handles both inline (monolithic YAML) and directory-based (controls_dir) formats.",
+        "description": "Find the file that defines a requirement: the control file, or any file in the policy's requirement directory, which may hold several requirements, such as NIST 800-53's family files (ac.yml holds ac-2). For a requirement that doesn't exist in a directory-based policy, returns where its file would go, with exists=false.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -599,7 +599,7 @@ TOOLS = [
     # Scaffolding tools - write operations
     {
         "name": "update_requirement_rules",
-        "description": "Update the rules list and status for a specific requirement in a control file. Handles both inline (monolithic YAML) and directory-based (controls_dir) formats. Preserves Jinja2 templating, comments, and formatting, and changes only the requirement's own rules and status, not those of nested requirements. The edited file is parsed before it is written; if anything else would change, the file is left unchanged and an error is returned. Requirements whose rules use Jinja2 conditionals are refused.",
+        "description": "Update the rules list and status for a specific requirement in a control file. The requirement can be in the control file or in any file of the policy's requirement directory, including files that hold several requirements, such as NIST 800-53's family files. Policies defined only per product, such as nist_800_53, need product. Preserves Jinja2 templating, comments, and formatting, and changes only the requirement's own rules and status, not those of nested requirements. The edited file is parsed before it is written; if anything else would change, the file is left unchanged and an error is returned. Requirements whose rules use Jinja2 conditionals are refused.",
         "inputSchema": {
             "type": "object",
             "properties": {

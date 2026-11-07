@@ -103,3 +103,36 @@ class TestControlUpdatesWithRealContent:
         assert not result.success
         assert "Jinja2 conditionals" in result.errors[0]
         assert requirement_file.read_text() == original
+
+    def test_nist_family_file(self, real_content_repo, updater_for, tmp_path):
+        # Copied to the global controls directory, so no product is needed
+        controls = tmp_path / "controls"
+        controls.mkdir()
+        product_controls = real_content_repo.path / "products" / "rhel9" / "controls"
+        shutil.copy2(product_controls / "nist_800_53.yml", controls / "nist_800_53.yml")
+        shutil.copytree(product_controls / "nist_800_53", controls / "nist_800_53")
+        before = _cac_controls(real_content_repo.path, controls, "nist_800_53", "rhel9")
+
+        result = updater_for(tmp_path).update_requirement_rules(
+            "nist_800_53", "ac-2", ["account_disable_post_pw_expiration"], "automated"
+        )
+
+        assert result.success, result.errors
+        assert result.file_path == controls / "nist_800_53" / "ac.yml"
+        after = _cac_controls(real_content_repo.path, controls, "nist_800_53", "rhel9")
+        assert len(after) == len(before)
+        assert after["ac-2"].rules == ["account_disable_post_pw_expiration"]
+        assert after["ac-2.1"].rules == before["ac-2.1"].rules
+
+    def test_directory_named_after_policy_file(self, real_content_repo, updater_for, tmp_path):
+        controls = _copy_controls(
+            real_content_repo.path, tmp_path, ["cis_ocp_200.yml", "cis_ocp_200"]
+        )
+
+        result = updater_for(tmp_path).update_requirement_rules(
+            "cis_ocp_200", "1.2.11", ["sweep_rule"], "automated"
+        )
+
+        assert result.success, result.errors
+        after = _cac_controls(real_content_repo.path, controls, "cis_ocp_200", "ocp4")
+        assert after["1.2.11"].rules == ["sweep_rule"]
