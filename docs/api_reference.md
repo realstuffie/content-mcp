@@ -503,6 +503,12 @@ Check which products include a given rule, via identifiers, profile selections, 
 
 **Returns:** RuleProductAvailability object
 
+`has_build_artifacts` contains only the built products checked for this rule.
+An entry is true when the server can load
+`build/<product>/rules/<rule_id>.json`. OVAL or remediation files alone do not
+make it true. False means no rendered rule JSON was found. An omitted product
+has no reported result. This field does not report whether a datastream exists.
+
 #### get_requirement_file_path
 
 Resolve the filesystem path for a specific requirement in a control file. Handles both inline (monolithic YAML) and directory-based (controls_dir) formats.

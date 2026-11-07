@@ -517,7 +517,7 @@ TOOLS = [
     },
     {
         "name": "get_rule_product_availability",
-        "description": "Check which products include a given rule, via identifiers, profile selections, and build artifacts. Useful for cross-product compliance analysis.",
+        "description": "Check products through rule identifiers and profile selections. has_build_artifacts checks readable build/<product>/rules/<rule_id>.json in detected build directories; OVAL or remediation files alone do not make it true. Omitted products have no reported result, and the flag does not report datastream presence.",
         "inputSchema": {
             "type": "object",
             "properties": {

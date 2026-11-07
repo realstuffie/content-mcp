@@ -165,7 +165,11 @@ class RuleProductAvailability(BaseModel):
     )
     has_build_artifacts: dict[str, bool] = Field(
         default_factory=dict,
-        description="Product -> whether rendered content exists in build/",
+        description=(
+            "Checked built product -> whether build/<product>/rules/<rule_id>.json "
+            "can be loaded. OVAL or remediation files alone do not make this true. "
+            "Omitted products have no reported result; false means no rendered rule JSON."
+        ),
     )
 
 

@@ -40,6 +40,9 @@ Measured against ComplianceAsCode/content master at `f09d243` (2026-11-04):
 
 Other changes:
 
+- `has_build_artifacts` now describes the rendered rule JSON check it performs.
+  OVAL or remediation files alone do not make an entry true, and an omitted
+  product has no reported result.
 - `mcp` is capped below 2.0, because 2.x crashes the server on startup.
 - MCP tests now exercise SDK sessions and the stdio entry point. Resource reads
   return JSON with the right MIME type and serialized timestamps. Parameterized

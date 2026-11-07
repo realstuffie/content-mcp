@@ -22,7 +22,9 @@ The system SHALL provide a `get_rule_product_availability` MCP tool that reports
 
 #### Scenario: Build artifact checking
 - **WHEN** `get_rule_product_availability` is called for a rule with built products
-- **THEN** `has_build_artifacts` contains a mapping of product names to booleans indicating whether rendered content exists
+- **THEN** `has_build_artifacts` contains an entry for each checked built product, true when `build/<product>/rules/<rule_id>.json` can be loaded and false when it is absent
+- **AND** OVAL or remediation files alone do not make an entry true
+- **AND** an omitted product has no reported result, and the field does not report datastream presence
 
 ### Requirement: RuleProductAvailability model
 The system SHALL define a `RuleProductAvailability` Pydantic model with fields: `rule_id` (str), `products_with_identifiers` (list[str]), `products_in_profiles` (dict[str, list[str]]), `platforms` (list[str]), `template` (dict | None), `has_build_artifacts` (dict[str, bool]).

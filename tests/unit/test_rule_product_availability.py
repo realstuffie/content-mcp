@@ -1,5 +1,6 @@
 """Tests for rule product availability functionality."""
 
+import json
 from unittest.mock import MagicMock, patch
 
 from content_agent.models.rule import RuleDetails, RuleProductAvailability
@@ -43,6 +44,38 @@ class TestGetRuleProductAvailability:
             result = discovery.get_rule_product_availability("nonexistent")
 
         assert result is None
+
+    def test_build_flags_require_rule_json_in_checked_products(self, initialized_content_repo):
+        from content_agent.core.discovery.rules import RuleDiscovery
+
+        root = initialized_content_repo.path
+        for product in ("rhel8", "rhel9"):
+            (root / "build" / product / "rules").mkdir(parents=True)
+        oval = root / "build" / "rhel8" / "checks" / "oval"
+        oval.mkdir(parents=True)
+        (oval / "test_rule.xml").write_text("<def-group/>")
+        remediation = root / "build" / "rhel8" / "fixes_from_templates" / "bash"
+        remediation.mkdir(parents=True)
+        (remediation / "test_rule.sh").write_text("#!/bin/bash\ntrue\n")
+        (root / "build" / "rhel9" / "rules" / "test_rule.json").write_text(
+            json.dumps({"title": "Test rule"})
+        )
+        discovery = RuleDiscovery()
+        discovery._profile_rule_index = {}
+        rule = RuleDetails(
+            rule_id="test_rule",
+            title="Test rule",
+            description="Test",
+            severity="medium",
+            products=["rhel8", "rhel9", "rhel10"],
+            file_path="test/rule.yml",
+            rule_dir="test",
+        )
+        with patch.object(discovery, "get_rule_details", return_value=rule):
+            availability = discovery.get_rule_product_availability("test_rule")
+
+        assert availability is not None
+        assert availability.has_build_artifacts == {"rhel8": False, "rhel9": True}
 
     @patch("content_agent.core.discovery.rules.get_content_repository")
     def test_basic_availability(self, mock_repo):
