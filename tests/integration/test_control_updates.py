@@ -136,3 +136,18 @@ class TestControlUpdatesWithRealContent:
         assert result.success, result.errors
         after = _cac_controls(real_content_repo.path, controls, "cis_ocp_200", "ocp4")
         assert after["1.2.11"].rules == ["sweep_rule"]
+
+    def test_add_keeps_srg_list_comments(self, real_content_repo, updater_for, tmp_path):
+        controls = _copy_controls(real_content_repo.path, tmp_path, ["srg_gpos.yml", "srg_gpos"])
+        requirement_file = controls / "srg_gpos" / "SRG-OS-000480-GPOS-00227.yml"
+        before = _cac_controls(real_content_repo.path, controls, "srg_gpos", "rhel9")
+        old_rules = before["SRG-OS-000480-GPOS-00227"].rules
+
+        result = updater_for(tmp_path).update_requirement_rules(
+            "srg_gpos", "SRG-OS-000480-GPOS-00227", ["sweep_rule"], mode="add"
+        )
+
+        assert result.success, result.errors
+        assert "# file permissions" in requirement_file.read_text()
+        after = _cac_controls(real_content_repo.path, controls, "srg_gpos", "rhel9")
+        assert after["SRG-OS-000480-GPOS-00227"].rules == old_rules + ["sweep_rule"]

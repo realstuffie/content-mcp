@@ -454,3 +454,6 @@ class ControlUpdateResult(BaseModel):
         default_factory=list,
         description="Problems that did not stop the update",
     )
+    rules: list[str] | None = Field(None, description="The requirement's rules after the update")
+    rules_added: list[str] = Field(default_factory=list, description="Rules the update added")
+    rules_removed: list[str] = Field(default_factory=list, description="Rules the update removed")

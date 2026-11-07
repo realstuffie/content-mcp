@@ -775,7 +775,9 @@ class TestEditChecks:
         (controls_dir / "test.yml").write_text(original)
 
         with patch.object(
-            updater, "_update_requirement_in_text", return_value="controls:\n  - id: R1\n   x: [\n"
+            updater,
+            "_update_requirement_in_text",
+            return_value=("controls:\n  - id: R1\n   x: [\n", [], ["rule_a"]),
         ):
             result = updater.update_requirement_rules("test", "R1", ["rule_a"], "automated")
 
@@ -800,7 +802,9 @@ class TestEditChecks:
         controls_dir.mkdir()
         (controls_dir / "test.yml").write_text(original)
 
-        with patch.object(updater, "_update_requirement_in_text", return_value=clobbered):
+        with patch.object(
+            updater, "_update_requirement_in_text", return_value=(clobbered, [], ["rule_a"])
+        ):
             result = updater.update_requirement_rules("test", "R1", ["rule_a"], "automated")
 
         assert not result.success
@@ -877,3 +881,141 @@ class TestSharedRequirementFiles:
 
         assert not result.success
         assert "defined per product (rhel9)" in result.errors[0]
+
+
+class TestRuleModes:
+    """add and remove change only the affected list items."""
+
+    LIST_WITH_COMMENT = """\
+        controls:
+            - id: R1
+              rules:
+                  # file permissions
+                  - rule_a
+                  - rule_b
+              status: manual
+        """
+
+    def _write(self, tmp_path: Path, content: str) -> Path:
+        _write_inline_control(tmp_path, "test", content)
+        return tmp_path / "controls" / "test.yml"
+
+    def test_add_appends_and_keeps_comments_and_status(
+        self, updater: ControlUpdater, tmp_path: Path
+    ) -> None:
+        path = self._write(tmp_path, self.LIST_WITH_COMMENT)
+
+        result = updater.update_requirement_rules("test", "R1", ["rule_c"], mode="add")
+
+        assert result.success, result.errors
+        assert result.rules == ["rule_a", "rule_b", "rule_c"]
+        assert result.rules_added == ["rule_c"]
+        assert result.rules_removed == []
+        content = path.read_text()
+        assert "# file permissions" in content
+        requirement = _requirement(content, "R1")
+        assert requirement["rules"] == ["rule_a", "rule_b", "rule_c"]
+        assert requirement["status"] == "manual"
+
+    def test_add_existing_rule_writes_nothing(
+        self, updater: ControlUpdater, tmp_path: Path
+    ) -> None:
+        path = self._write(tmp_path, self.LIST_WITH_COMMENT)
+        original = path.read_text()
+
+        result = updater.update_requirement_rules("test", "R1", ["rule_a"], mode="add")
+
+        assert result.success
+        assert result.requirements_unchanged == 1
+        assert result.requirements_updated == 0
+        assert path.read_text() == original
+
+    def test_add_without_rules_key(self, updater: ControlUpdater, tmp_path: Path) -> None:
+        path = self._write(tmp_path, "controls:\n    - id: R1\n      status: pending\n")
+
+        result = updater.update_requirement_rules("test", "R1", ["rule_a"], mode="add")
+
+        assert result.success, result.errors
+        assert _requirement(path.read_text(), "R1") == {
+            "id": "R1",
+            "status": "pending",
+            "rules": ["rule_a"],
+        }
+
+    def test_add_to_flow_style_list(self, updater: ControlUpdater, tmp_path: Path) -> None:
+        path = self._write(tmp_path, "controls:\n    - id: R1\n      rules: [rule_a]\n")
+
+        result = updater.update_requirement_rules("test", "R1", ["rule_b"], mode="add")
+
+        assert result.success, result.errors
+        assert _requirement(path.read_text(), "R1")["rules"] == ["rule_a", "rule_b"]
+
+    def test_remove_keeps_other_items_and_comments(
+        self, updater: ControlUpdater, tmp_path: Path
+    ) -> None:
+        path = self._write(tmp_path, self.LIST_WITH_COMMENT)
+
+        result = updater.update_requirement_rules("test", "R1", ["rule_a"], mode="remove")
+
+        assert result.success, result.errors
+        assert result.rules_removed == ["rule_a"]
+        content = path.read_text()
+        assert "# file permissions" in content
+        assert _requirement(content, "R1")["rules"] == ["rule_b"]
+
+    def test_remove_last_rule_leaves_empty_list(
+        self, updater: ControlUpdater, tmp_path: Path
+    ) -> None:
+        path = self._write(tmp_path, "controls:\n    - id: R1\n      rules:\n          - rule_a\n")
+
+        result = updater.update_requirement_rules("test", "R1", ["rule_a"], mode="remove")
+
+        assert result.success, result.errors
+        assert "rules: []" in path.read_text()
+
+    def test_remove_absent_rule_writes_nothing(
+        self, updater: ControlUpdater, tmp_path: Path
+    ) -> None:
+        path = self._write(tmp_path, self.LIST_WITH_COMMENT)
+        original = path.read_text()
+
+        result = updater.update_requirement_rules("test", "R1", ["rule_z"], mode="remove")
+
+        assert result.requirements_unchanged == 1
+        assert path.read_text() == original
+
+    def test_remove_with_status(self, updater: ControlUpdater, tmp_path: Path) -> None:
+        path = self._write(tmp_path, self.LIST_WITH_COMMENT)
+
+        result = updater.update_requirement_rules(
+            "test", "R1", ["rule_b"], status="partial", mode="remove"
+        )
+
+        assert result.success, result.errors
+        assert _requirement(path.read_text(), "R1")["status"] == "partial"
+
+    def test_replace_reports_what_it_dropped(self, updater: ControlUpdater, tmp_path: Path) -> None:
+        self._write(tmp_path, self.LIST_WITH_COMMENT)
+
+        result = updater.update_requirement_rules("test", "R1", ["rule_b", "rule_c"])
+
+        assert result.success, result.errors
+        assert result.rules_added == ["rule_c"]
+        assert result.rules_removed == ["rule_a"]
+
+    def test_replace_still_defaults_to_automated(
+        self, updater: ControlUpdater, tmp_path: Path
+    ) -> None:
+        path = self._write(tmp_path, self.LIST_WITH_COMMENT)
+
+        updater.update_requirement_rules("test", "R1", ["rule_a"])
+
+        assert _requirement(path.read_text(), "R1")["status"] == "automated"
+
+    def test_invalid_mode(self, updater: ControlUpdater, tmp_path: Path) -> None:
+        self._write(tmp_path, self.LIST_WITH_COMMENT)
+
+        result = updater.update_requirement_rules("test", "R1", ["rule_a"], mode="merge")
+
+        assert not result.success
+        assert "Invalid mode 'merge'" in result.errors[0]

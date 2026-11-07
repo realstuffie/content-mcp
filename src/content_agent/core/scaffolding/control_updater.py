@@ -25,6 +25,9 @@ logger = logging.getLogger(__name__)
 
 VALID_STATUSES = frozenset(CONTROL_STATUSES)
 
+# How `rules` combine with the requirement's current rules
+RULE_MODES = ("replace", "add", "remove")
+
 # Status names this tool used to accept, and the ComplianceAsCode status to use instead
 _RENAMED_STATUSES = {
     "partially_automated": "partial",
@@ -37,6 +40,47 @@ _ID_PATTERN = re.compile(
 )
 _KEY_PATTERN = re.compile(r"^(?P<indent> *)(?P<key>[A-Za-z_][\w-]*):(?:\s|$)")
 _JINJA_STATEMENT = re.compile(r"^\s*\{\{?%")
+
+
+def _apply_edits(lines: list[str], edits: list[tuple[int, int, list[str]]]) -> list[str]:
+    """Apply non-overlapping (start, end, replacement) edits to a list of lines.
+
+    Insertions at the same position keep the order they were given in.
+    """
+    result: list[str] = []
+    position = 0
+    for start, end, replacement in sorted(edits, key=lambda edit: edit[0]):
+        result.extend(lines[position:start])
+        result.extend(replacement)
+        position = max(position, end)
+    result.extend(lines[position:])
+    return result
+
+
+def _item_value(text: str) -> str:
+    """Return a list item's value without a trailing comment or quotes."""
+    return re.split(r"\s+#", text, maxsplit=1)[0].strip().strip("'\"")
+
+
+def _flow_value(rules_line: str) -> str:
+    """Return the text after `rules:` on its own line, such as `[]`, without a comment."""
+    return re.split(r"\s+#", rules_line.split(":", 1)[1], maxsplit=1)[0].strip()
+
+
+def _rules_in_span(lines: list[str], rules_start: int, rules_end: int) -> list[str]:
+    """Return the rules of a `rules:` key, in block or flow style."""
+    flow = _flow_value(lines[rules_start])
+    if flow:
+        try:
+            parsed = yaml.safe_load(flow)
+        except yaml.YAMLError:
+            return []
+        return [str(rule) for rule in parsed] if isinstance(parsed, list) else []
+    return [
+        _item_value(line.strip()[2:])
+        for line in lines[rules_start + 1 : rules_end]
+        if line.lstrip().startswith("- ")
+    ]
 
 
 class _UpdateRefused(Exception):
@@ -103,8 +147,9 @@ class ControlUpdater:
         control_id: str,
         requirement_id: str,
         rules: list[str],
-        status: str = "automated",
+        status: str | None = None,
         product: str | None = None,
+        mode: str = "replace",
     ) -> ControlUpdateResult:
         """Update rules and status for a specific requirement.
 
@@ -117,11 +162,21 @@ class ControlUpdater:
         Args:
             control_id: Control framework identifier
             requirement_id: Requirement identifier
-            rules: List of rule IDs to set
-            status: A ComplianceAsCode control status (default: "automated")
+            rules: Rule IDs to set, add or remove, depending on `mode`
+            status: A ComplianceAsCode control status. In replace mode it defaults
+                to "automated"; in add and remove modes the status is left as it
+                is unless given.
             product: Optional product ID to scope to product-specific controls
+            mode: "replace" sets the rules to `rules`; "add" adds those not already
+                there, after the current ones; "remove" removes them
         """
-        if status not in VALID_STATUSES:
+        if mode not in RULE_MODES:
+            return self._failure(
+                Path("."), f"Invalid mode '{mode}'. Must be one of: {', '.join(RULE_MODES)}"
+            )
+        if status is None and mode == "replace":
+            status = "automated"
+        if status is not None and status not in VALID_STATUSES:
             return self._failure(Path("."), self._invalid_status_message(status))
 
         # Resolve control file path
@@ -148,7 +203,7 @@ class ControlUpdater:
                 control_file, f"Requirement '{requirement_id}' not found in {searched}"
             )
 
-        return self._update_file(found[0], requirement_id, rules, status, substitutions)
+        return self._update_file(found[0], requirement_id, rules, status, substitutions, mode)
 
     def _missing_control_message(self, control_id: str, product: str | None) -> str:
         message = f"Control file not found: {control_id}"
@@ -169,23 +224,42 @@ class ControlUpdater:
         file_path: Path,
         requirement_id: str,
         rules: list[str],
-        status: str,
+        status: str | None,
         substitutions: dict[str, Any],
+        mode: str = "replace",
     ) -> ControlUpdateResult:
         """Edit one requirement in a file, after checking the edited text."""
         content = file_path.read_text()
         try:
-            updated = self._update_requirement_in_text(content, requirement_id, rules, status)
+            edit = self._update_requirement_in_text(content, requirement_id, rules, status, mode)
         except _UpdateRefused as e:
             return self._failure(file_path, f"{e} The file was left unchanged.")
 
-        if updated is None:
+        if edit is None:
             return self._failure(
                 file_path, f"Requirement '{requirement_id}' not found in {file_path}"
             )
+        updated, current, final = edit
+        added = [rule for rule in final if rule not in current]
+        removed = [rule for rule in current if rule not in final]
+
+        if updated == content:
+            return ControlUpdateResult(
+                file_path=file_path,
+                requirements_added=0,
+                requirements_updated=0,
+                requirements_unchanged=1,
+                success=True,
+                rules=final,
+            )
 
         problem, warnings = self._check_edit(
-            file_path, updated, requirement_id, rules, status, substitutions
+            file_path,
+            updated,
+            requirement_id,
+            final if final != current else None,
+            status,
+            substitutions,
         )
         if problem:
             return self._failure(file_path, f"{problem} The file was left unchanged.")
@@ -199,6 +273,9 @@ class ControlUpdater:
             requirements_unchanged=0,
             success=True,
             warnings=warnings,
+            rules=final,
+            rules_added=added,
+            rules_removed=removed,
         )
 
     def _update_requirement_in_text(
@@ -206,11 +283,14 @@ class ControlUpdater:
         content: str,
         requirement_id: str,
         rules: list[str],
-        status: str,
-    ) -> str | None:
+        status: str | None,
+        mode: str = "replace",
+    ) -> tuple[str, list[str], list[str]] | None:
         """Find and update a requirement block in raw YAML text.
 
-        Returns the updated text, or None if the requirement was not found.
+        Returns the updated text with the requirement's rules before and after,
+        or None if the requirement was not found. In add and remove modes, only
+        the affected list items change, so comments in the list stay.
 
         Raises:
             _UpdateRefused: If Jinja2 conditionals make the edit ambiguous
@@ -242,41 +322,90 @@ class ControlUpdater:
 
         edits: list[tuple[int, int, list[str]]] = []
         missing: list[str] = []
-        status_line = f"{' ' * key_indent}status: {status}\n"
 
+        current: list[str] = []
         if "rules" in fields:
             rules_start, rules_end = fields["rules"][0]
             value_lines = lines[rules_start + 1 : rules_end]
             if any(_JINJA_STATEMENT.match(line) for line in value_lines):
                 raise _UpdateRefused(
                     f"The rules of requirement '{requirement_id}' use Jinja2 conditionals, "
-                    "which replacing the list would drop. Edit it by hand."
+                    "which changing the list could break. Edit it by hand."
                 )
-            item_indent = next(
-                (_indent(line) for line in value_lines if line.lstrip().startswith("- ")),
-                key_indent + 4,
-            )
-            edits.append(
-                (rules_start, rules_end, self._format_rules_block(rules, key_indent, item_indent))
-            )
-        else:
-            missing.extend(self._format_rules_block(rules, key_indent, key_indent + 4))
+            current = _rules_in_span(lines, rules_start, rules_end)
 
-        if "status" in fields:
-            status_start, status_end = fields["status"][0]
-            edits.append((status_start, status_end, [status_line]))
+        if mode == "add":
+            final = current + [rule for rule in dict.fromkeys(rules) if rule not in current]
+        elif mode == "remove":
+            final = [rule for rule in current if rule not in set(rules)]
         else:
-            missing.append(status_line)
+            final = list(rules)
+
+        if final != current:
+            if "rules" in fields:
+                edits.extend(
+                    self._rules_edits(
+                        lines, rules_start, rules_end, key_indent, current, final, mode
+                    )
+                )
+            elif final:
+                missing.extend(self._format_rules_block(final, key_indent, key_indent + 4))
+
+        if status is not None:
+            status_line = f"{' ' * key_indent}status: {status}\n"
+            if "status" in fields:
+                status_start, status_end = fields["status"][0]
+                edits.append((status_start, status_end, [status_line]))
+            else:
+                missing.append(status_line)
 
         if missing:
             # Before nested requirements if there are any, else at the end of the block
             insert_at = fields["controls"][0][0] if "controls" in fields else end
             edits.append((insert_at, insert_at, missing))
 
-        for edit_start, edit_end, replacement in sorted(edits, key=lambda e: e[0], reverse=True):
-            lines[edit_start:edit_end] = replacement
+        return "".join(_apply_edits(lines, edits)), current, final
 
-        return "".join(lines)
+    def _rules_edits(
+        self,
+        lines: list[str],
+        rules_start: int,
+        rules_end: int,
+        key_indent: int,
+        current: list[str],
+        final: list[str],
+        mode: str,
+    ) -> list[tuple[int, int, list[str]]]:
+        """Return the edits that turn the rules list into `final`.
+
+        A block list with items keeps its other lines, comments included, in add
+        and remove modes. Otherwise the list is rewritten.
+        """
+        item_lines = [
+            index
+            for index in range(rules_start + 1, rules_end)
+            if lines[index].lstrip().startswith("- ")
+        ]
+        item_indent = _indent(lines[item_lines[0]]) if item_lines else key_indent + 4
+        rewrite = [
+            (rules_start, rules_end, self._format_rules_block(final, key_indent, item_indent))
+        ]
+        if mode == "replace" or not item_lines or _flow_value(lines[rules_start]):
+            return rewrite
+        if mode == "add":
+            added = [rule for rule in final if rule not in current]
+            new_items = [f"{' ' * item_indent}- {rule}\n" for rule in added]
+            after_last = item_lines[-1] + 1
+            return [(after_last, after_last, new_items)]
+        # remove
+        if not final:
+            return rewrite
+        keep = set(final)
+        return [
+            (index, index + 1, [])
+            for index in item_lines
+            if _item_value(lines[index].strip()[2:]) not in keep
+        ]
 
     def _find_requirement_start(self, lines: list[str], requirement_id: str) -> int | None:
         """Find the line index of `- id: <requirement_id>`."""
@@ -365,14 +494,15 @@ class ControlUpdater:
         file_path: Path,
         updated: str,
         requirement_id: str,
-        rules: list[str],
-        status: str,
+        rules: list[str] | None,
+        status: str | None,
         substitutions: dict[str, Any],
     ) -> tuple[str | None, list[str]]:
         """Parse the file before and after the edit, and compare.
 
         Returns a problem that should stop the write, if any, and warnings.
-        Only the requirement's `rules` and `status` may differ.
+        Only the requirement's `rules` and `status` may differ; None means the
+        field should be unchanged.
         """
         try:
             before = load_control_yaml(file_path, substitutions)
@@ -401,8 +531,10 @@ class ControlUpdater:
                 f"Requirement '{requirement_id}' was not found when parsing {file_path.name}.",
                 [],
             )
-        target["rules"] = list(rules)
-        target["status"] = status
+        if rules is not None:
+            target["rules"] = list(rules)
+        if status is not None:
+            target["status"] = status
 
         if _plain(after) != expected:
             return (

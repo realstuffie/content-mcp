@@ -614,12 +614,17 @@ TOOLS = [
                 "rules": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Rule IDs to set for this requirement (replaces existing rules)",
+                    "description": "Rule IDs to set, add or remove, depending on mode",
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": ["replace", "add", "remove"],
+                    "description": "replace (default) sets the rules to exactly these; add adds the ones not already there, after the current rules; remove removes them. add and remove keep the other lines of the list, comments included.",
                 },
                 "status": {
                     "type": "string",
                     "enum": list(CONTROL_STATUSES),
-                    "description": "ComplianceAsCode control status to set (default: 'automated')",
+                    "description": "ComplianceAsCode control status to set. Defaults to 'automated' in replace mode; add and remove leave the status unchanged unless it is given.",
                 },
                 "product": {
                     "type": "string",
@@ -1268,8 +1273,9 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
             control_id = arguments["control_id"]
             requirement_id = arguments["requirement_id"]
             rules = arguments["rules"]
-            status = arguments.get("status", "automated")
+            status = arguments.get("status")
             product = arguments.get("product")
+            mode = arguments.get("mode", "replace")
 
             updater = ControlUpdater()
             result = updater.update_requirement_rules(
@@ -1278,18 +1284,29 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
                 rules=rules,
                 status=status,
                 product=product,
+                mode=mode,
             )
 
             if not result.success:
                 error_text = f"Update failed: {'; '.join(result.errors)}"
                 return [{"type": "text", "text": error_text}]
 
-            summary = (
-                f"Updated requirement '{requirement_id}' in '{control_id}'\n"
-                f"Rules set: {rules}\n"
-                f"Status: {status}\n"
-                f"File: {result.file_path}\n"
-            )
+            if result.requirements_unchanged:
+                summary = (
+                    f"Requirement '{requirement_id}' in '{control_id}' already matches; "
+                    "nothing was written\n"
+                    f"Rules: {result.rules}\n"
+                    f"File: {result.file_path}\n"
+                )
+            else:
+                summary = (
+                    f"Updated requirement '{requirement_id}' in '{control_id}'\n"
+                    f"Rules now: {result.rules}\n"
+                    f"Added: {result.rules_added}\n"
+                    f"Removed: {result.rules_removed}\n"
+                    f"Status: {status if status is not None else 'unchanged'}\n"
+                    f"File: {result.file_path}\n"
+                )
             if result.warnings:
                 summary += "Warnings: " + "; ".join(result.warnings) + "\n"
             summary += "\n"

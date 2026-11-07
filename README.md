@@ -48,7 +48,7 @@ Other changes:
 - Deprecated dependencies and APIs are replaced: `pypdf` replaces the deprecated `PyPDF2`, the models use Pydantic 2's `ConfigDict`, and timestamps no longer use `datetime.utcnow()`. The only warnings left in the test run come from Jinja2 escapes in ComplianceAsCode's own macros.
 - CI runs the integration tests on Python 3.11 to 3.14 against a pinned content commit, and a weekly job runs them against content master. The [CI design record](openspec/changes/archive/2026-11-07-ci-real-content/design.md) explains why.
 
-`update_requirement_rules` also parses each edited file before writing it, and leaves the file unchanged if anything besides the requirement's rules and status would change. The [design record](openspec/changes/archive/2026-11-07-safe-requirement-updates/design.md) explains why.
+`update_requirement_rules` also parses each edited file before writing it, and leaves the file unchanged if anything besides the requirement's rules and status would change. It can also add or remove single rules (`mode`), keeping comments in the list, and every result lists the rules it added and removed. The [design record](openspec/changes/archive/2026-11-07-safe-requirement-updates/design.md) explains why.
 
 The larger changes have design records in [`openspec/changes/archive/`](openspec/changes/archive/), in the entries dated 2026-11-06 and 2026-11-07.
 
