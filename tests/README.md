@@ -4,11 +4,24 @@
 
 This directory contains unit and integration tests for the content-agent.
 
-The MCP resource regression tests use SDK sessions and temporary content.
-They run without a real content checkout.
+`integration/test_mcp_protocol.py` sends requests through MCP SDK sessions. It
+covers discovery, all 25 reading and validation tools, concrete resources and
+resource templates, timestamps, Unicode text, schema errors, execution failures,
+and concurrent requests. These cases use a temporary content fixture and need
+no external checkout. Rule generation and requirement updates are outside this
+suite's scope.
+
+One additional case launches `python -m content_agent` against the detected real
+content checkout. It checks initialization, newline-delimited JSON-RPC, tool
+discovery, calls with omitted arguments, schema rejection, unknown methods,
+and shutdown at EOF. It also checks that logs stay out of stdout. This case
+skips when no real checkout is available. All server state and logs for this
+case go into the test's temporary directory.
+
+Run the protocol tests with:
 
 ```bash
-pytest tests/integration/test_mcp_protocol.py -q
+CONTENT_REPO=/path/to/content pytest tests/integration/test_mcp_protocol.py -q
 ```
 
 ## Test Structure
@@ -20,9 +33,10 @@ tests/
 │   ├── test_models.py
 │   ├── test_config.py
 │   └── test_validators.py
-└── integration/          # Integration tests (require content repo)
+└── integration/          # Protocol tests and tests against real content
     ├── test_tools.py
-    └── test_resources.py
+    ├── test_resources.py
+    └── test_mcp_protocol.py
 ```
 
 ## Running Tests
@@ -47,7 +61,7 @@ pytest tests/unit/
 
 ### Run Only Integration Tests
 
-Integration tests require a ComplianceAsCode/content repository. They are
+Tests against real content require a ComplianceAsCode/content repository. They are
 **automatically skipped** when no repo is detected, and **automatically run**
 when one is found. Detection checks two locations in order:
 

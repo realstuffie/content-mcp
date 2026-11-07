@@ -1,76 +1,90 @@
+## Context
+
+Direct handler tests bypass the SDK's URI conversion, request validation, and
+response serialization. They can pass while the same request fails over MCP.
+The first live resource test exposed an `AnyUrl` conversion failure. The broader
+suite added in this change exposed more failures in the same boundary code.
+
 ## Decisions
 
-### SDK resource URI conversion
+### Test sessions with temporary content
 
-The SDK passes AnyUrl objects to resource handlers. The server passed
-them straight to urlparse, which tried to call decode on them and failed.
-Direct handler tests used strings and missed the failure.
+Use the SDK's connected memory streams to exchange MCP messages with
+`ContentAgentServer`. Create a small repository with a product, profile, rule,
+template, control policy, and build artifacts. The fixture includes timestamps
+and Unicode text. It mocks SSG expansion with a YAML loader, so these tests check
+protocol handling rather than duplicate the real-content expansion tests.
 
-Convert the URI to a string at the server boundary. A regression test
-now reads the product collection and a product through an MCP session.
+Enter and exit each SDK session inside the test task. AnyIO cancel scopes must
+exit in the same task that entered them. An async generator fixture under
+pytest-asyncio did not meet that condition.
 
-### Resource timestamp serialization
+### Test the stdio process separately
 
-Rule details and datastream metadata contain Python datetimes. Resource
-handlers used model_dump without JSON mode, so json.dumps failed on
-last_modified and build_time even though direct discovery calls worked.
+Launch the real CLI with the test interpreter and a detected content checkout.
+Send newline-delimited JSON-RPC through pipes and check request IDs on replies.
+Require clean stdout, startup logs in the log file, and a zero exit status after
+stdin closes. Time out replies and kill a failed subprocess during cleanup.
+This test skips when no real content checkout exists.
 
-Dump resource models in JSON mode before encoding them. Session tests
-read all 12 resource routes, parse the timestamps and preserve Unicode
-text. Shared fixtures provide a temporary product, rule and build.
+The installed SDK reports `-32602` for an unknown method because it rejects the
+method while decoding its request union. The test accepts that code or `-32601`
+and requires a JSON-RPC error followed by a successful ping. Unknown tool names
+use the SDK's tool-error response. This change does not replace SDK dispatch.
 
-### Resource content MIME type
+### Return resource metadata through the SDK
 
-Resource descriptors advertised application/json, but reads returned
-plain strings. The SDK wrapped those strings as text/plain, so the
-content metadata disagreed with the resource listing.
+Keep the existing resource handlers' string return values. At the server
+boundary, convert `AnyUrl` to `str` and wrap the returned JSON in
+`ReadResourceContents` with `application/json`. Use `model_dump(mode="json")`
+before encoding model values. Plain model dumps retain Python datetimes, which
+`json.dumps` cannot serialize.
 
-Wrap resource text in ReadResourceContents with application/json. The
-session tests now check the URI, MIME type and JSON content of all
-12 resource routes.
+Split the resource descriptors into six concrete collections and six templates.
+Register a template-list handler. Keeping braces in concrete resource URIs
+caused the SDK to encode them as `%7B` and `%7D`.
 
-### Resource template discovery
+### Preserve error meaning
 
-resources/list included URIs such as cac://products/{product_id} as
-concrete resources. The SDK escaped their braces, and clients could
-not discover their parameters through resources/templates/list.
+Resource routing raises distinct `ValueError` subclasses for invalid URIs and
+missing resources. The server maps them to `-32602` and `-32002`. Other resource
+read failures use `-32603`. Existing Python callers that catch `ValueError`
+continue to work.
 
-Keep the six collection URIs in resources/list and register the six
-parameterized descriptors as resource templates. A session test checks
-both discovery responses and their MIME types.
+Tool lookup failures and execution exceptions raise `ValueError` through the
+dispatcher. The SDK converts them to `CallToolResult` with `isError: true`.
+Validators can still return `valid: false` in a successful tool result.
+Discovery calls that return partial results with parse warnings also remain
+successful. These cases have separate tests.
 
-### Rendered-rule resource paths
+## Compatibility
 
-The rendered-rule resource route accepted four or more path segments
-and ignored everything after the rule ID. A URI ending in /extra
-returned the same rule as the valid URI.
+Concrete resource reads and successful tool payloads keep their existing shapes.
+Parameterized resource discovery moves to the MCP template endpoint. Direct
+Python calls to the tool dispatcher now raise on failure, as its docstring
+already specified. Three existing tests change to assert that behavior.
 
-Require exactly four segments for a rendered-rule resource. A session
-test checks that the extra segment is rejected and the client can
-still send another request.
+The suite uses MCP SDK 1.x. It does not claim full MCP conformance or SDK 2.x
+compatibility. It does not test rule generation or file edits.
 
-### Resource error codes
+## References
 
-Resource routing raised ValueError for both invalid URIs and missing
-content. The SDK returned the same generic error for those cases and
-for YAML parse failures, so clients could not distinguish them.
-
-Use distinct ValueError subclasses for invalid routes and missing
-resources. Map them to JSON-RPC codes -32602 and -32002, and map other
-read failures to -32603. Missing-resource errors include the URI.
-Session tests check each code and verify recovery after a failed read.
-
-### Tool execution errors
-
-The tool dispatcher caught execution failures and returned their text
-as normal content. Missing objects and failed requirement updates did
-the same, so the SDK reported isError=false even when a call failed.
-
-Raise lookup and execution failures through the dispatcher so the SDK
-sets isError=true. Update the direct dispatcher tests and add session
-tests for schema rejection, failed lookups and parse errors. Completed
-validation calls and partial results with warnings remain successful.
+- [MCP resources](https://modelcontextprotocol.io/specification/2025-11-25/server/resources)
+- [MCP tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools)
 
 ## Verification
 
-Each implemented fix has a regression test through an MCP session.
+The first 57 session cases produced 21 failures before the fixes and 36 passes.
+The completed suite has 64 session cases and one stdio subprocess case. The
+full test run against content commit `f09d24369249b7eae7e241bf82541bdf718e7661`
+passed all 489 tests. The 47 warnings come from Jinja2 escape sequences in the
+content checkout's macros.
+
+Overall coverage rose from 72% to 80%. Resource-handler coverage is 93%, and
+server coverage is 92%. Black, Ruff, mypy, and whitespace checks pass.
+
+The local sandbox stalled the stdio subprocess's input pipe before the
+initialization reply. The subprocess case and the full suite passed outside
+that sandbox. Session cases passed inside it. The subprocess test uses a
+deadline while it collects each line, so a partial reply cannot leave it
+waiting without a timeout.

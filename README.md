@@ -41,19 +41,11 @@ Measured against ComplianceAsCode/content master at `f09d243` (2026-11-04):
 Other changes:
 
 - `mcp` is capped below 2.0, because 2.x crashes the server on startup.
-- Resource reads now accept the SDK's URI objects, so clients can read
-  collections and product details through MCP.
-- Resource model dumps now serialize timestamps as JSON values. Session tests
-  read every resource route, including rules and built datastreams.
-- Resource reads now return application/json, matching their descriptors.
-- Parameterized resources now appear in resources/templates/list.
-  resources/list contains the six concrete collection URIs.
-- Rendered-rule resource URIs now reject path segments after the rule ID.
-- Resource errors now distinguish invalid URIs, missing content and read
-  failures with JSON-RPC codes -32602, -32002 and -32603.
-- Failed tool calls now set isError. Completed validations and usable partial
-  discovery results with parse warnings remain successful.
-  The [protocol design record](openspec/changes/archive/2026-11-07-test-mcp-protocol/design.md) describes these fixes.
+- MCP tests now exercise SDK sessions and the stdio entry point. Resource reads
+  return JSON with the right MIME type and serialized timestamps. Parameterized
+  URIs appear in `resources/templates/list`. Failed tool calls set `isError`, and
+  resource errors distinguish missing content from invalid URIs and parse
+  failures. The [protocol test design record](openspec/changes/archive/2026-11-07-test-mcp-protocol/design.md) describes the fixes and test scope.
 - AI requests work with anthropic SDK 2.x, and the default model is `claude-sonnet-5-5`, replacing the retired `claude-3-5-sonnet-20241022`.
 - The profile index is shared between tool calls, so `get_rule_product_availability` takes about 0.1 seconds after the first call instead of about 15.
 - The product list is shared between tool calls too, so control tools that take a product, like `get_requirement_file_path`, answer in about 1 ms instead of 55 to 65.

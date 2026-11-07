@@ -4,19 +4,13 @@
 
 Resources provide read-only access to content via URI.
 
-The server accepts the SDK's URI objects when a client calls resources/read.
+`resources/list` returns the six concrete collection URIs. `resources/templates/list`
+returns the six parameterized URI templates shown below. To read a template,
+replace its parameters with actual identifiers and call `resources/read`.
 
-Resource timestamps use ISO 8601 strings in JSON responses.
-
-Resource reads declare application/json and preserve the requested URI.
-
-resources/list returns concrete collection URIs. Parameterized URIs appear in
-resources/templates/list.
-
-Rendered-rule URIs reject path segments after the rule ID.
-
-Invalid resource routes return -32602, missing resources return -32002, and
-other read failures return -32603.
+Resource responses use `application/json`. Timestamps use ISO 8601 strings.
+Missing resources return JSON-RPC error `-32002`, invalid URI routes return
+`-32602`, and read or parse failures return `-32603`.
 
 ### Products
 
@@ -111,6 +105,12 @@ Returns: RenderedRule object (fully rendered after Jinja processing)
 ## MCP Tools
 
 Tools are invokable actions that perform operations.
+
+Failed lookups and execution errors return tool results with `isError: true`.
+The MCP SDK also rejects arguments that do not match the tool's input schema.
+A validator that reports invalid YAML still returns `isError: false`, because
+the validation call completed. Discovery calls that return usable results with
+parse warnings also keep `isError: false`.
 
 ### Discovery Tools
 
