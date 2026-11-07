@@ -48,6 +48,31 @@ def controls_dir_setting(control_file: Path) -> dict[str, str]:
     return {"controls_dir": match["subdir"]} if match else {}
 
 
+class AmbiguousControlError(ValueError):
+    """A policy is defined for several products, and no product was given."""
+
+    def __init__(self, control_id: str, products: list[str]) -> None:
+        self.control_id = control_id
+        self.products = products
+        super().__init__(
+            f"Control '{control_id}' is defined per product ({', '.join(products)}); "
+            "pass product to choose one"
+        )
+
+
+def _product_of_controls_dir(directory: Path) -> str | None:
+    """Return the product of a products/<product>/controls directory, or None."""
+    parts = directory.parts
+    if len(parts) >= 3 and parts[-1] == "controls" and parts[-3] == "products":
+        return parts[-2]
+    return None
+
+
+def _product_of(control_file: Path) -> str | None:
+    """Return the product a control file belongs to, or None for a global one."""
+    return _product_of_controls_dir(control_file.parent)
+
+
 def requirements_directory(control_file: Path, data: Any) -> Path | None:
     """Return the directory holding a policy's requirement files, if it has one.
 
@@ -205,9 +230,12 @@ class ControlDiscovery:
         return controls
 
     def _resolve_control_file(self, control_id: str, product: str | None = None) -> Path | None:
-        """Resolve the file path for a control ID using override semantics.
+        """Resolve the file path for a control ID.
 
-        Later directories override earlier ones.
+        With a product, the product's own file overrides the global one. Without
+        one, the global file is used; a policy defined only for products resolves
+        to that product's file when there is one product, and is ambiguous when
+        there are several.
 
         Args:
             control_id: Control framework identifier
@@ -215,7 +243,28 @@ class ControlDiscovery:
 
         Returns:
             Path to the control file, or None if not found
+
+        Raises:
+            AmbiguousControlError: If no product is given and several products
+                define the policy
         """
+        if product is None:
+            global_file = self.content_repo.path / "controls" / f"{control_id}.yml"
+            if global_file.exists():
+                return global_file
+            products = self.products_defining(control_id)
+            if len(products) > 1:
+                raise AmbiguousControlError(control_id, products)
+            if products:
+                return (
+                    self.content_repo.path
+                    / "products"
+                    / products[0]
+                    / "controls"
+                    / (f"{control_id}.yml")
+                )
+            return None
+
         resolved: Path | None = None
 
         for controls_dir in self._get_controls_dirs(product):
@@ -229,6 +278,22 @@ class ControlDiscovery:
                 resolved = candidate
 
         return resolved
+
+    def products_defining(self, control_id: str) -> list[str]:
+        """Return the products that define a policy in their own controls directory."""
+        return sorted(
+            path.parent.parent.name
+            for path in self.content_repo.path.glob(f"products/*/controls/{control_id}.yml")
+        )
+
+    def controls_needing_product(self) -> list[str]:
+        """Return the policies that several products define and no global file does."""
+        controls_dir = self.content_repo.path / "controls"
+        counts: dict[str, int] = {}
+        for path in self.content_repo.path.glob("products/*/controls/*.yml"):
+            if not (controls_dir / path.name).exists():
+                counts[path.stem] = counts.get(path.stem, 0) + 1
+        return sorted(control_id for control_id, count in counts.items() if count > 1)
 
     def get_control_details(
         self, control_id: str, product: str | None = None
@@ -249,8 +314,11 @@ class ControlDiscovery:
             logger.warning(f"Control file not found: {control_id}")
             return None
 
+        # A product's own policy is expanded with that product's variables
         return self.parse_control_file(
-            control_file, source_dir=control_file.parent, product=product
+            control_file,
+            source_dir=control_file.parent,
+            product=product or _product_of(control_file),
         )
 
     def parse_control_file(
@@ -349,7 +417,10 @@ class ControlDiscovery:
             control = self.get_control_details(control_id, product=product)
             controls_to_search = [control] if control else []
         else:
-            control_ids = self.list_controls(product=product)
+            # Without a product, policies that several products define are
+            # ambiguous and left out; controls_needing_product() lists them
+            skip = set(self.controls_needing_product()) if product is None else set()
+            control_ids = [cid for cid in self.list_controls(product=product) if cid not in skip]
             controls_to_search = [
                 c
                 for cid in control_ids
@@ -413,10 +484,26 @@ class ControlDiscovery:
         all_rule_ids: set[str] = set()
         controls_indexed = 0
 
+        versions: list[tuple[str, ControlFile]] = []
         for control_id in ids_to_process:
-            control_file = self.get_control_details(control_id, product=product)
-            if control_file is None:
+            try:
+                control_file = self.get_control_details(control_id, product=product)
+            except AmbiguousControlError as e:
+                # Without a product, include each product's version, tagged with it
+                for version_product in e.products:
+                    version = self.get_control_details(control_id, product=version_product)
+                    if version is not None:
+                        versions.append((control_id, version))
                 continue
+            if control_file is not None:
+                versions.append((control_id, control_file))
+
+        for control_id, control_file in versions:
+            file_product = product or (
+                _product_of_controls_dir(control_file.source_dir)
+                if control_file.source_dir
+                else None
+            )
 
             controls_indexed += 1
             flat_controls = self._flatten_controls(control_file.controls)
@@ -429,6 +516,7 @@ class ControlDiscovery:
 
                 indexed = IndexedRequirement(
                     control_id=control_id,
+                    product=file_product,
                     requirement_id=req.id,
                     title=req.title,
                     description=description,
@@ -650,6 +738,7 @@ class ControlDiscovery:
                 results.append(
                     SimilarRequirement(
                         control_id=req.control_id,
+                        product=req.product,
                         requirement_id=req.requirement_id,
                         title=req.title,
                         description=req.description,

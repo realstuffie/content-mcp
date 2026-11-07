@@ -359,6 +359,9 @@ class IndexedRequirement(BaseModel):
     """A requirement with its parent control context, for cross-framework indexing."""
 
     control_id: str = Field(..., description="Parent control framework ID (e.g., 'anssi', 'hipaa')")
+    product: str | None = Field(
+        None, description="Product whose version of the control file this is; None if global"
+    )
     requirement_id: str = Field(
         ..., description="Requirement ID within the control (e.g., 'R1', 'AC-2(5)')"
     )
@@ -386,6 +389,9 @@ class SimilarRequirement(BaseModel):
     """A requirement found via text similarity search."""
 
     control_id: str = Field(..., description="Parent control framework ID")
+    product: str | None = Field(
+        None, description="Product whose version of the control file this is; None if global"
+    )
     requirement_id: str = Field(..., description="Requirement ID")
     title: str = Field(..., description="Requirement title")
     description: str = Field(..., description="Requirement description")

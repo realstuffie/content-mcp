@@ -27,6 +27,7 @@ Measured against ComplianceAsCode/content master at `f09d243` (2026-11-04):
 | Policies whose requirement count matches the content build | 47 of 70 | 70 of 70 |
 | Rules the `ocp4` CIS profile selects | 0 | 96 |
 | Profiles whose `filter_rules` are applied | 0 of 23 | 23 of 23 |
+| `get_control_details("nist_800_53")` without a product | uses RHEL 9's file without saying so | asks which of the 4 products |
 | Rules that fail to load | 16 | 0 |
 | Rules `get_rule_details` crashes on | 6 | 0 |
 | Rules the server can find | 2530 of 2566 | 2566 (adds the 36 Firefox rules) |

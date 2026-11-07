@@ -19,7 +19,8 @@ class TestRequirementFilesWithRealContent:
         from content_agent.core.discovery.controls import ControlDiscovery
         from content_agent.models.control import flatten_requirements
 
-        control = ControlDiscovery().get_control_details("nist_800_53")
+        # nist_800_53 is defined per product
+        control = ControlDiscovery().get_control_details("nist_800_53", product="rhel9")
 
         assert control is not None
         assert control.parse_errors == []
@@ -74,3 +75,21 @@ class TestRequirementFileLookup:
         assert result is not None
         assert result.exists is True
         assert result.file_path.name == "ac.yml"
+
+
+@requires_content_repo
+class TestPoliciesWithoutAProduct:
+    def test_nist_needs_a_product(self, real_content_repo):
+        import pytest
+
+        from content_agent.core.discovery.controls import AmbiguousControlError, ControlDiscovery
+
+        with pytest.raises(AmbiguousControlError, match="rhel8"):
+            ControlDiscovery().get_control_details("nist_800_53")
+
+    def test_rule_index_has_every_nist_version(self, real_content_repo):
+        from content_agent.core.discovery.controls import ControlDiscovery
+
+        index = ControlDiscovery().get_control_rule_index(control_ids=["nist_800_53"])
+
+        assert {r.product for r in index.requirements} == {"fedora", "rhel8", "rhel9", "rhel10"}

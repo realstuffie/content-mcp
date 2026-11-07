@@ -441,3 +441,106 @@ class TestSourceDirModelField:
         cf = ControlFile(id="test", title="Test", source_dir=tmp_path / "controls")
         dumped = cf.model_dump(mode="json")
         assert "source_dir" in dumped
+
+
+class TestPoliciesWithoutAProduct:
+    """Which control file is used when no product is given."""
+
+    def _discovery(self, repo):
+        from content_agent.core.discovery.controls import ControlDiscovery
+
+        with patch("content_agent.core.discovery.controls.get_content_repository") as get_repo:
+            get_repo.return_value.path = repo
+            discovery = ControlDiscovery()
+        return discovery
+
+    def _repo(self, tmp_path):
+        req = [{"id": "R1", "title": "First", "rules": ["rule_a"]}]
+        _write_control_yaml(tmp_path / "controls" / "shared.yml", "shared", "Global", req)
+        _write_control_yaml(
+            tmp_path / "products" / "rhel9" / "controls" / "shared.yml", "shared", "RHEL 9", req
+        )
+        _write_control_yaml(
+            tmp_path / "products" / "rhel9" / "controls" / "stig_rhel9.yml",
+            "stig_rhel9",
+            "STIG",
+            req,
+        )
+        for product in ("rhel8", "rhel9"):
+            _write_control_yaml(
+                tmp_path / "products" / product / "controls" / "nist.yml",
+                "nist",
+                f"NIST for {product}",
+                [{"id": "ac-2", "title": "Account Management", "rules": [f"rule_{product}"]}],
+            )
+        return tmp_path
+
+    def test_global_file_wins_without_product(self, tmp_path):
+        discovery = self._discovery(self._repo(tmp_path))
+
+        assert discovery.get_control_details("shared").title == "Global"
+        with patch(
+            "content_agent.core.discovery.products.ProductDiscovery",
+            _mock_product_discovery(["rhel8", "rhel9"]),
+        ):
+            assert discovery.get_control_details("shared", product="rhel9").title == "RHEL 9"
+
+    def test_policy_of_one_product(self, tmp_path):
+        discovery = self._discovery(self._repo(tmp_path))
+
+        control = discovery.get_control_details("stig_rhel9")
+
+        assert control is not None
+        assert control.title == "STIG"
+
+    def test_policy_of_several_products_needs_a_product(self, tmp_path):
+        from content_agent.core.discovery.controls import AmbiguousControlError
+
+        discovery = self._discovery(self._repo(tmp_path))
+
+        with pytest.raises(AmbiguousControlError, match=r"defined per product \(rhel8, rhel9\)"):
+            discovery.get_control_details("nist")
+        assert discovery.controls_needing_product() == ["nist"]
+
+    def test_rule_index_includes_each_product_version(self, tmp_path):
+        discovery = self._discovery(self._repo(tmp_path))
+
+        with patch(
+            "content_agent.core.discovery.products.ProductDiscovery",
+            _mock_product_discovery(["rhel8", "rhel9"]),
+        ):
+            index = discovery.get_control_rule_index(control_ids=["nist", "shared"])
+
+        tagged = sorted((r.control_id, r.product, tuple(r.rules)) for r in index.requirements)
+        assert tagged == [
+            ("nist", "rhel8", ("rule_rhel8",)),
+            ("nist", "rhel9", ("rule_rhel9",)),
+            ("shared", None, ("rule_a",)),
+        ]
+
+    def test_similar_requirements_say_which_product(self, tmp_path):
+        discovery = self._discovery(self._repo(tmp_path))
+
+        with patch(
+            "content_agent.core.discovery.products.ProductDiscovery",
+            _mock_product_discovery(["rhel8", "rhel9"]),
+        ):
+            similar = discovery.find_similar_requirements("account management", min_similarity=0.5)
+
+        assert sorted((s.control_id, s.product) for s in similar) == [
+            ("nist", "rhel8"),
+            ("nist", "rhel9"),
+        ]
+
+    def test_search_leaves_out_policies_of_several_products(self, tmp_path):
+        discovery = self._discovery(self._repo(tmp_path))
+
+        with patch(
+            "content_agent.core.discovery.products.ProductDiscovery",
+            _mock_product_discovery(["rhel8", "rhel9"]),
+        ):
+            found = discovery.search_controls("account management")
+            found_for_rhel8 = discovery.search_controls("account management", product="rhel8")
+
+        assert found == []
+        assert [r.id for r in found_for_rhel8] == ["ac-2"]

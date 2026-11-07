@@ -425,7 +425,7 @@ TOOLS = [
     },
     {
         "name": "get_control_details",
-        "description": "Get detailed information about a control framework",
+        "description": "Get detailed information about a control framework. Without product, the global control file is used, or the product's file for a policy only one product defines; a policy several products define, such as nist_800_53, needs product.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -461,7 +461,7 @@ TOOLS = [
     },
     {
         "name": "get_control_rule_index",
-        "description": "Build a complete index of all requirements and rule mappings across all control frameworks. Useful for cross-framework rule discovery.",
+        "description": "Build a complete index of all requirements and rule mappings across all control frameworks. Useful for cross-framework rule discovery. Each requirement says which product's version of its control file it comes from, or null for a global one. Without product, policies that several products define, such as nist_800_53, are included once per product.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -485,7 +485,7 @@ TOOLS = [
     },
     {
         "name": "find_similar_requirements",
-        "description": "Find requirements with similar text across all control frameworks using text similarity. Useful for discovering how different frameworks address the same security concern.",
+        "description": "Find requirements with similar text across all control frameworks using text similarity. Useful for discovering how different frameworks address the same security concern. Results say which product's version of a control file they come from; without product, policies that several products define are searched once per product.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -531,7 +531,7 @@ TOOLS = [
     },
     {
         "name": "search_control_requirements",
-        "description": "Search within control files for specific requirements",
+        "description": "Search within control files for specific requirements. Without product or control_id, policies that several products define, such as nist_800_53, are left out and listed in the result.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -1136,7 +1136,17 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
                 query=query, control_id=control_id, product=product
             )
             result = [r.model_dump(mode="json") for r in control_requirements]
-            summary = f"Found {len(control_requirements)} matching requirements\n\n"
+            summary = f"Found {len(control_requirements)} matching requirements\n"
+            if product is None and control_id is None:
+                from content_agent.core.discovery.controls import ControlDiscovery
+
+                skipped = ControlDiscovery().controls_needing_product()
+                if skipped:
+                    summary += (
+                        "Not searched, because several products define them; pass product "
+                        f"to include them: {', '.join(skipped)}\n"
+                    )
+            summary += "\n"
 
             return [{"type": "text", "text": summary + json.dumps(result, indent=2)}]
 
