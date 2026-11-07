@@ -10,6 +10,14 @@ from content_agent.core import discovery
 logger = logging.getLogger(__name__)
 
 
+class InvalidResourceURI(ValueError):
+    """The resource URI does not match a supported route."""
+
+
+class ResourceNotFoundError(ValueError):
+    """The URI is valid, but the requested resource does not exist."""
+
+
 async def handle_resource_read(uri: str) -> str:
     """Handle resource read requests.
 
@@ -26,7 +34,7 @@ async def handle_resource_read(uri: str) -> str:
 
     parsed = urlparse(uri)
     if parsed.scheme != "cac":
-        raise ValueError(f"Invalid URI scheme: {parsed.scheme}, expected 'cac'")
+        raise InvalidResourceURI(f"Invalid URI scheme: {parsed.scheme}, expected 'cac'")
 
     # Handle both cac://products and cac:products formats
     # urlparse treats "cac://products" as netloc, not path
@@ -38,7 +46,7 @@ async def handle_resource_read(uri: str) -> str:
         path_parts = [p for p in parsed.path.strip("/").split("/") if p]
 
     if not path_parts or not path_parts[0]:
-        raise ValueError("Invalid resource path")
+        raise InvalidResourceURI("Invalid resource path")
 
     resource_type = path_parts[0]
 
@@ -53,10 +61,10 @@ async def handle_resource_read(uri: str) -> str:
             product_id = path_parts[1]
             product = discovery.get_product_details(product_id)
             if not product:
-                raise ValueError(f"Product not found: {product_id}")
+                raise ResourceNotFoundError(f"Product not found: {product_id}")
             return json.dumps(product.model_dump(mode="json"), indent=2)
         else:
-            raise ValueError(f"Invalid products resource path: {uri}")
+            raise InvalidResourceURI(f"Invalid products resource path: {uri}")
 
     elif resource_type == "rules":
         if len(path_parts) == 1:
@@ -68,10 +76,10 @@ async def handle_resource_read(uri: str) -> str:
             rule_id = path_parts[1]
             rule = discovery.get_rule_details(rule_id)
             if not rule:
-                raise ValueError(f"Rule not found: {rule_id}")
+                raise ResourceNotFoundError(f"Rule not found: {rule_id}")
             return json.dumps(rule.model_dump(mode="json"), indent=2)
         else:
-            raise ValueError(f"Invalid rules resource path: {uri}")
+            raise InvalidResourceURI(f"Invalid rules resource path: {uri}")
 
     elif resource_type == "templates":
         if len(path_parts) == 1:
@@ -83,10 +91,10 @@ async def handle_resource_read(uri: str) -> str:
             template_name = path_parts[1]
             schema = discovery.get_template_schema(template_name)
             if not schema:
-                raise ValueError(f"Template not found: {template_name}")
+                raise ResourceNotFoundError(f"Template not found: {template_name}")
             return json.dumps(schema.model_dump(mode="json"), indent=2)
         else:
-            raise ValueError(f"Invalid templates resource path: {uri}")
+            raise InvalidResourceURI(f"Invalid templates resource path: {uri}")
 
     elif resource_type == "profiles":
         if len(path_parts) == 1:
@@ -99,10 +107,10 @@ async def handle_resource_read(uri: str) -> str:
             profile_id = path_parts[2]
             profile = discovery.get_profile_details(profile_id, product_id)
             if not profile:
-                raise ValueError(f"Profile not found: {profile_id} in {product_id}")
+                raise ResourceNotFoundError(f"Profile not found: {profile_id} in {product_id}")
             return json.dumps(profile.model_dump(mode="json"), indent=2)
         else:
-            raise ValueError(f"Invalid profiles resource path: {uri}")
+            raise InvalidResourceURI(f"Invalid profiles resource path: {uri}")
 
     elif resource_type == "controls":
         if len(path_parts) == 1:
@@ -110,7 +118,7 @@ async def handle_resource_read(uri: str) -> str:
             controls = discovery.list_controls()
             return json.dumps(controls, indent=2)
         else:
-            raise ValueError(f"Invalid controls resource path: {uri}")
+            raise InvalidResourceURI(f"Invalid controls resource path: {uri}")
 
     elif resource_type == "build":
         # Handle build artifacts resources
@@ -123,7 +131,7 @@ async def handle_resource_read(uri: str) -> str:
             build_product = path_parts[1]
             info = discovery.get_datastream_info(build_product)
             if not info:
-                raise ValueError(f"No build artifacts for product: {build_product}")
+                raise ResourceNotFoundError(f"No build artifacts for product: {build_product}")
             return json.dumps(info.model_dump(mode="json"), indent=2)
         elif len(path_parts) == 4 and path_parts[2] == "rules":
             # Get rendered rule: build/{product}/rules/{rule_id}
@@ -131,13 +139,15 @@ async def handle_resource_read(uri: str) -> str:
             rule_id = path_parts[3]
             rendered = discovery.get_rendered_rule(build_product, rule_id)
             if not rendered:
-                raise ValueError(f"Rendered rule not found: {rule_id} for {build_product}")
+                raise ResourceNotFoundError(
+                    f"Rendered rule not found: {rule_id} for {build_product}"
+                )
             return json.dumps(rendered.model_dump(mode="json"), indent=2)
         else:
-            raise ValueError(f"Invalid build resource path: {uri}")
+            raise InvalidResourceURI(f"Invalid build resource path: {uri}")
 
     else:
-        raise ValueError(f"Unknown resource type: {resource_type}")
+        raise InvalidResourceURI(f"Unknown resource type: {resource_type}")
 
 
 def list_resources() -> list[dict[str, Any]]:

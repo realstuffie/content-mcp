@@ -20,6 +20,10 @@ The rendered-rule resource route accepted four or more path segments
 and ignored everything after the rule ID. A URI ending in /extra
 returned the same rule as the valid URI.
 
+Resource routing raised ValueError for both invalid URIs and missing
+content. The SDK returned the same generic error for those cases and
+for YAML parse failures, so clients could not distinguish them.
+
 ## What changes
 
 Convert the URI to a string at the server boundary. A regression test
@@ -40,6 +44,11 @@ both discovery responses and their MIME types.
 Require exactly four segments for a rendered-rule resource. A session
 test checks that the extra segment is rejected and the client can
 still send another request.
+
+Use distinct ValueError subclasses for invalid routes and missing
+resources. Map them to JSON-RPC codes -32602 and -32002, and map other
+read failures to -32603. Missing-resource errors include the URI.
+Session tests check each code and verify recovery after a failed read.
 
 ## Capabilities
 

@@ -6,7 +6,8 @@ from typing import Any
 from mcp.server import Server
 from mcp.server.lowlevel.helper_types import ReadResourceContents
 from mcp.server.stdio import stdio_server
-from mcp.types import Resource, ResourceTemplate, Tool
+from mcp.shared.exceptions import McpError
+from mcp.types import INTERNAL_ERROR, INVALID_PARAMS, ErrorData, Resource, ResourceTemplate, Tool
 from pydantic import AnyUrl
 
 from content_agent.server.handlers import prompts, resources, tools
@@ -51,7 +52,17 @@ class ContentAgentServer:
         async def handle_read_resource(uri: AnyUrl) -> list[ReadResourceContents]:
             """Handle read resource request."""
             logger.debug(f"Reading resource: {uri}")
-            content = await resources.handle_resource_read(str(uri))
+            try:
+                content = await resources.handle_resource_read(str(uri))
+            except resources.InvalidResourceURI as e:
+                raise McpError(ErrorData(code=INVALID_PARAMS, message=str(e))) from e
+            except resources.ResourceNotFoundError as e:
+                raise McpError(
+                    ErrorData(code=-32002, message=str(e), data={"uri": str(uri)})
+                ) from e
+            except Exception as e:
+                logger.exception("Resource read failed: %s", uri)
+                raise McpError(ErrorData(code=INTERNAL_ERROR, message=str(e))) from e
             return [ReadResourceContents(content=content, mime_type="application/json")]
 
         # List tools handler

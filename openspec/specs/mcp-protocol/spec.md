@@ -49,3 +49,14 @@ The server SHALL reject segments after the rule ID.
 
 - **WHEN** a client adds /extra after a rendered-rule ID
 - **THEN** the read fails and the same session still accepts a valid request
+
+### Requirement: Resource error codes
+
+The server SHALL return -32602 for invalid resource routes, -32002 for
+missing resources and -32603 for other read failures. Missing-resource
+errors SHALL include the URI in their data.
+
+#### Scenario: Resource error codes
+
+- **WHEN** a client requests an invalid URI, missing object or unparseable resource
+- **THEN** the error code identifies the failure and a later request in the session succeeds

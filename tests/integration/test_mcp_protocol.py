@@ -144,8 +144,40 @@ async def test_resource_discovery_separates_templates(mcp_session):
             assert descriptor.mimeType == "application/json"
 
 
-async def test_rendered_resource_rejects_extra_path(mcp_session):
-    async with mcp_session as client:
-        with pytest.raises(McpError, match="Invalid build resource path"):
-            await client.read_resource(f"cac://build/rhel9/rules/{RULE}/extra")
-        await client.send_ping()
+@pytest.mark.parametrize(
+    "uri, message",
+    [
+        ("https://products", "Invalid URI scheme"),
+        ("cac://unknown", "Unknown resource type"),
+        ("cac://products/missing", "Product not found"),
+        ("cac://rules/missing", "Rule not found"),
+        ("cac://templates/missing", "Template not found"),
+        ("cac://profiles/rhel9/missing", "Profile not found"),
+        ("cac://products/rhel9/extra", "Invalid products resource path"),
+        (f"cac://build/rhel9/rules/{RULE}/extra", "Invalid build resource path"),
+    ],
+)
+async def test_resource_errors_leave_session_usable(mcp_session, uri, message):
+    async with mcp_session as mcp_session:
+        with pytest.raises(McpError, match=message) as error:
+            await mcp_session.read_resource(uri)
+        expected_code = -32002 if "not found" in message else -32602
+        assert error.value.error.code == expected_code
+        if expected_code == -32002:
+            assert error.value.error.data == {"uri": uri}
+        await mcp_session.send_ping()
+        assert (
+            _json_content(await mcp_session.call_tool("list_products", {}))[0]["product_id"]
+            == "rhel9"
+        )
+
+
+async def test_resource_parse_failure_uses_internal_error(mcp_session, protocol_repo):
+    product = protocol_repo / "products" / "broken"
+    product.mkdir()
+    (product / "product.yml").write_text("product: [\n")
+    async with mcp_session as mcp_session:
+        with pytest.raises(McpError) as error:
+            await mcp_session.read_resource("cac://products/broken")
+        assert error.value.error.code == -32603
+        await mcp_session.send_ping()

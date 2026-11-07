@@ -15,6 +15,9 @@ resources/templates/list.
 
 Rendered-rule URIs reject path segments after the rule ID.
 
+Invalid resource routes return -32602, missing resources return -32002, and
+other read failures return -32603.
+
 ### Products
 
 **List all products**
