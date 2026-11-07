@@ -3,7 +3,7 @@
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TestJobStatus(StrEnum):
@@ -35,10 +35,8 @@ class TestJobId(BaseModel):
     profile_id: str | None = Field(None, description="Profile ID if testing profile")
     message: str = Field(..., description="Informational message")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "job_id": "test_1234567890",
                 "product": "rhel9",
@@ -46,7 +44,8 @@ class TestJobId(BaseModel):
                 "profile_id": None,
                 "message": "Test job submitted successfully",
             }
-        }
+        },
+    )
 
 
 class TestScenarioResult(BaseModel):
@@ -61,10 +60,8 @@ class TestScenarioResult(BaseModel):
     output: str = Field(default="", description="Test output")
     error_message: str | None = Field(None, description="Error message if failed")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "scenario": "correct_value.pass.sh",
                 "status": "pass",
@@ -72,7 +69,8 @@ class TestScenarioResult(BaseModel):
                 "duration_seconds": 5.2,
                 "output": "Test passed: SSH timeout is set correctly",
             }
-        }
+        },
+    )
 
 
 class TestResults(BaseModel):
@@ -97,10 +95,8 @@ class TestResults(BaseModel):
     logs: str = Field(default="", description="Full test logs")
     error_message: str | None = Field(None, description="Error message if job failed")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "job_id": "test_1234567890",
                 "status": "completed",
@@ -126,4 +122,5 @@ class TestResults(BaseModel):
                 ],
                 "logs": "Starting tests...\nTest 1/6: correct_value.pass.sh...",
             }
-        }
+        },
+    )

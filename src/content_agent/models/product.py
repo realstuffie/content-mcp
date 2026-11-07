@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ProductSummary(BaseModel):
@@ -14,10 +14,8 @@ class ProductSummary(BaseModel):
     version: str | None = Field(None, description="Product version if applicable")
     description: str | None = Field(None, description="Product description")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "product_id": "rhel9",
                 "name": "Red Hat Enterprise Linux 9",
@@ -25,7 +23,8 @@ class ProductSummary(BaseModel):
                 "version": "9",
                 "description": "Security compliance content for RHEL 9",
             }
-        }
+        },
+    )
 
 
 class ProductStats(BaseModel):
@@ -52,10 +51,8 @@ class ProductDetails(BaseModel):
     stats: ProductStats | None = Field(None, description="Product statistics")
     last_modified: datetime | None = Field(None, description="Last modification timestamp")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "product_id": "rhel9",
                 "name": "Red Hat Enterprise Linux 9",
@@ -73,4 +70,5 @@ class ProductDetails(BaseModel):
                     "test_count": 1200,
                 },
             }
-        }
+        },
+    )

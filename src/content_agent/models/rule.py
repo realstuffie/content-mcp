@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class RuleSearchResult(BaseModel):
@@ -16,10 +16,8 @@ class RuleSearchResult(BaseModel):
     products: list[str] = Field(default_factory=list, description="Products this rule applies to")
     file_path: str = Field(..., description="Path to rule.yml file")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "rule_id": "sshd_set_idle_timeout",
                 "title": "Set SSH Idle Timeout Interval",
@@ -28,7 +26,8 @@ class RuleSearchResult(BaseModel):
                 "products": ["rhel7", "rhel8", "rhel9", "fedora"],
                 "file_path": "linux_os/guide/services/ssh/ssh_server/sshd_set_idle_timeout/rule.yml",
             }
-        }
+        },
+    )
 
 
 class RuleIdentifiers(BaseModel):
@@ -39,10 +38,9 @@ class RuleIdentifiers(BaseModel):
     nist: list[str] | None = Field(None, description="NIST control references")
     stigid: str | None = Field(None, description="STIG identifier")
 
-    class Config:
-        """Pydantic config."""
-
-        extra = "allow"  # Allow additional identifiers
+    model_config = ConfigDict(
+        extra="allow",  # Allow additional identifiers
+    )
 
 
 class RuleReferences(BaseModel):
@@ -56,10 +54,9 @@ class RuleReferences(BaseModel):
     pcidss: list[str] = Field(default_factory=list, description="PCI-DSS references")
     hipaa: list[str] = Field(default_factory=list, description="HIPAA references")
 
-    class Config:
-        """Pydantic config."""
-
-        extra = "allow"  # Allow additional reference frameworks
+    model_config = ConfigDict(
+        extra="allow",  # Allow additional reference frameworks
+    )
 
 
 class RuleRenderedContent(BaseModel):
@@ -123,10 +120,8 @@ class RuleDetails(BaseModel):
         "Only populated if include_rendered=True and builds exist.",
     )
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "rule_id": "sshd_set_idle_timeout",
                 "title": "Set SSH Idle Timeout Interval",
@@ -146,7 +141,8 @@ class RuleDetails(BaseModel):
                 "file_path": "linux_os/guide/services/ssh/ssh_server/sshd_set_idle_timeout/rule.yml",
                 "rule_dir": "linux_os/guide/services/ssh/ssh_server/sshd_set_idle_timeout",
             }
-        }
+        },
+    )
 
 
 class RuleProductAvailability(BaseModel):
@@ -192,10 +188,8 @@ class ValidationResult(BaseModel):
         default_factory=list, description="Auto-fixes that were applied"
     )
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "valid": False,
                 "errors": [
@@ -215,4 +209,5 @@ class ValidationResult(BaseModel):
                 ],
                 "fixes_applied": [],
             }
-        }
+        },
+    )

@@ -70,6 +70,8 @@ class BuildSettings(BaseSettings):
 class TestingSettings(BaseSettings):
     """Testing settings."""
 
+    __test__ = False  # not a pytest test class
+
     backend: Literal["podman", "docker"] = Field(default="podman", description="Container backend")
     max_concurrent_tests: int = Field(
         default=4, description="Maximum concurrent tests", ge=1, le=20

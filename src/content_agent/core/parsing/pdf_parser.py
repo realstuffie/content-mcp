@@ -9,7 +9,7 @@ from content_agent.models.control import ParsedDocument
 
 try:
     import pdfplumber
-    from PyPDF2 import PdfReader
+    from pypdf import PdfReader
 
     PDF_AVAILABLE = True
 except ImportError:
@@ -25,7 +25,7 @@ class PDFParser(BaseParser):
         if not PDF_AVAILABLE:
             raise ParsingError(
                 "PDF parsing dependencies not installed. "
-                "Install with: pip install pdfplumber PyPDF2"
+                "Install with: pip install pdfplumber pypdf"
             )
 
     def parse(self, source: str | Path) -> ParsedDocument:

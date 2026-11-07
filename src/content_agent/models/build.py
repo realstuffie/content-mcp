@@ -3,7 +3,7 @@
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class BuildJobStatus(StrEnum):
@@ -33,10 +33,8 @@ class BuildJobId(BaseModel):
     rule_id: str | None = Field(None, description="Rule ID if building single rule")
     message: str = Field(..., description="Informational message")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "job_id": "build_1234567890",
                 "job_type": "rule",
@@ -44,7 +42,8 @@ class BuildJobId(BaseModel):
                 "rule_id": "sshd_set_idle_timeout",
                 "message": "Build job submitted successfully",
             }
-        }
+        },
+    )
 
 
 class BuildArtifact(BaseModel):
@@ -73,10 +72,8 @@ class BuildStatus(BaseModel):
     artifacts: list[BuildArtifact] = Field(default_factory=list, description="Generated artifacts")
     error_message: str | None = Field(None, description="Error message if failed")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "job_id": "build_1234567890",
                 "status": "completed",
@@ -98,7 +95,8 @@ class BuildStatus(BaseModel):
                     }
                 ],
             }
-        }
+        },
+    )
 
 
 class RenderedRule(BaseModel):
@@ -114,10 +112,8 @@ class RenderedRule(BaseModel):
     )
     build_path: str = Field(..., description="Path to build artifact directory")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "rule_id": "sshd_set_idle_timeout",
                 "product": "rhel9",
@@ -128,7 +124,8 @@ class RenderedRule(BaseModel):
                 },
                 "build_path": "build/rhel9/rules/sshd_set_idle_timeout",
             }
-        }
+        },
+    )
 
 
 class DatastreamInfo(BaseModel):
@@ -142,10 +139,8 @@ class DatastreamInfo(BaseModel):
     rules_count: int = Field(default=0, description="Number of rules in the datastream")
     exists: bool = Field(..., description="Whether the datastream file exists")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "product": "rhel9",
                 "datastream_path": "build/ssg-rhel9-ds.xml",
@@ -155,7 +150,8 @@ class DatastreamInfo(BaseModel):
                 "rules_count": 450,
                 "exists": True,
             }
-        }
+        },
+    )
 
 
 class RenderSearchResult(BaseModel):
@@ -167,10 +163,8 @@ class RenderSearchResult(BaseModel):
     match_snippet: str = Field(..., description="Snippet showing the match")
     file_path: str = Field(..., description="Path to the matching file")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "rule_id": "sshd_set_idle_timeout",
                 "product": "rhel9",
@@ -178,4 +172,5 @@ class RenderSearchResult(BaseModel):
                 "match_snippet": "...ClientAliveInterval 300...",
                 "file_path": "build/rhel9/rules/sshd_set_idle_timeout/bash.sh",
             }
-        }
+        },
+    )

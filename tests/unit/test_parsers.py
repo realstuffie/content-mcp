@@ -143,3 +143,25 @@ def test_base_parser_generate_section_id():
     # Test empty title
     section_id = parser._generate_section_id("", 5)
     assert section_id == "section_6"
+
+
+def test_pdf_parser_reads_metadata(tmp_path):
+    """PDF metadata comes from pypdf, the maintained successor of PyPDF2."""
+    pytest.importorskip("pdfplumber")
+    from pypdf import PdfWriter
+
+    from content_agent.core.parsing.pdf_parser import PDFParser
+
+    writer = PdfWriter()
+    writer.add_blank_page(width=200, height=200)
+    writer.add_blank_page(width=200, height=200)
+    writer.add_metadata({"/Title": "Sample Policy", "/Author": "Security Team"})
+    pdf_file = tmp_path / "policy.pdf"
+    with open(pdf_file, "wb") as f:
+        writer.write(f)
+
+    metadata = PDFParser()._extract_metadata_from_pdf(pdf_file)
+
+    assert metadata["title"] == "Sample Policy"
+    assert metadata["author"] == "Security Team"
+    assert metadata["page_count"] == 2

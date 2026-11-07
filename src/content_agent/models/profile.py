@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ProfileSummary(BaseModel):
@@ -14,10 +14,8 @@ class ProfileSummary(BaseModel):
     product: str = Field(..., description="Product this profile belongs to")
     rule_count: int | None = Field(None, description="Number of rules in profile")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "profile_id": "ospp",
                 "title": "Protection Profile for General Purpose Operating Systems",
@@ -25,7 +23,8 @@ class ProfileSummary(BaseModel):
                 "product": "rhel9",
                 "rule_count": 156,
             }
-        }
+        },
+    )
 
 
 class ProfileDetails(BaseModel):
@@ -46,10 +45,8 @@ class ProfileDetails(BaseModel):
         None, description="Control file if profile is based on controls"
     )
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "profile_id": "ospp",
                 "title": "Protection Profile for General Purpose Operating Systems",
@@ -62,7 +59,8 @@ class ProfileDetails(BaseModel):
                 "rule_count": 156,
                 "control_file": "controls/ospp.yml",
             }
-        }
+        },
+    )
 
 
 class TemplateSummary(BaseModel):
@@ -73,17 +71,16 @@ class TemplateSummary(BaseModel):
     language: str = Field(..., description="Template language (jinja2, etc.)")
     category: str | None = Field(None, description="Template category")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "name": "sshd_lineinfile",
                 "description": "Template for SSH daemon configuration options",
                 "language": "jinja2",
                 "category": "ssh",
             }
-        }
+        },
+    )
 
 
 class TemplateParameter(BaseModel):
@@ -112,10 +109,8 @@ class TemplateSchema(BaseModel):
         None, description="Template reference documentation from template_reference.md"
     )
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "name": "sshd_lineinfile",
                 "description": "Template for SSH daemon configuration options",
@@ -138,7 +133,8 @@ class TemplateSchema(BaseModel):
                     "value": "300",
                 },
             }
-        }
+        },
+    )
 
 
 class ScaffoldingResult(BaseModel):
@@ -153,10 +149,8 @@ class ScaffoldingResult(BaseModel):
         None, description="Validation result if validation was performed"
     )
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "success": True,
                 "rule_id": "sshd_max_auth_tries",
@@ -168,7 +162,8 @@ class ScaffoldingResult(BaseModel):
                 "rule_dir": "linux_os/guide/services/ssh/ssh_server/sshd_max_auth_tries",
                 "message": "Rule scaffolding created successfully",
             }
-        }
+        },
+    )
 
 
 # Import at end to avoid circular import

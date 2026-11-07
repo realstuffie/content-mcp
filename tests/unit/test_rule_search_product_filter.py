@@ -1,6 +1,7 @@
 """Tests for the search_rules product filter and the shared profile index."""
 
 import os
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import yaml
@@ -35,7 +36,9 @@ def _discovery(repo_path):
 
 def _plain_yaml_modules():
     modules = MagicMock()
-    modules.yaml.open_and_expand.side_effect = lambda path, subs: yaml.safe_load(open(path))
+    modules.yaml.open_and_expand.side_effect = lambda path, subs: yaml.safe_load(
+        Path(path).read_text()
+    )
     return modules
 
 

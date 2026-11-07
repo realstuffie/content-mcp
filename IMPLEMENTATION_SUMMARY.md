@@ -25,7 +25,7 @@ Implemented a comprehensive system for creating ComplianceAsCode control files f
 
 - **Document Parsers** (`src/content_agent/core/parsing/`)
   - BaseParser (abstract base class)
-  - PDFParser (using pdfplumber and PyPDF2)
+  - PDFParser (using pdfplumber and pypdf)
   - MarkdownParser (with frontmatter support)
   - TextParser (plain text with heading detection)
   - HTMLParser (web pages and HTML files)
@@ -71,7 +71,7 @@ Implemented a comprehensive system for creating ComplianceAsCode control files f
 #### Phase 4: Configuration and Dependencies
 - **Dependencies** (`pyproject.toml`)
   - pdfplumber>=0.10.0
-  - PyPDF2>=3.0.0
+  - pypdf>=4.0.0
   - markdown>=3.5.0
   - beautifulsoup4>=4.12.0
   - requests>=2.31.0
@@ -337,7 +337,7 @@ print(f'Sections: {len(doc.sections)}')
 ## Maintenance Notes
 
 ### Dependencies
-- Keep pdfplumber and PyPDF2 updated for PDF parsing improvements
+- Keep pdfplumber and pypdf updated for PDF parsing improvements
 - Monitor anthropic package for API changes
 - Test with latest Claude models
 

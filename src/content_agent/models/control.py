@@ -1,6 +1,6 @@
 """Data models for control files and policy documents."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, get_args
 
@@ -252,7 +252,7 @@ class ParsedDocument(BaseModel):
         description="Source document type",
     )
     parsed_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(UTC),
         description="Timestamp when document was parsed",
     )
 

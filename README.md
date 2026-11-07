@@ -38,6 +38,7 @@ Other changes:
 - AI requests work with anthropic SDK 2.x, and the default model is `claude-sonnet-5-5`, replacing the retired `claude-3-5-sonnet-20241022`.
 - The profile index is shared between tool calls, so `get_rule_product_availability` takes about 0.1 seconds after the first call instead of about 15.
 - `jinja2` is a declared dependency, because ComplianceAsCode's `ssg` modules import it.
+- Deprecated dependencies and APIs are replaced: `pypdf` replaces the deprecated `PyPDF2`, the models use Pydantic 2's `ConfigDict`, and timestamps no longer use `datetime.utcnow()`. The only warnings left in the test run come from Jinja2 escapes in ComplianceAsCode's own macros.
 - CI runs the integration tests on Python 3.11 to 3.14 against a pinned content commit, and a weekly job runs them against content master. The [CI design record](openspec/changes/archive/2026-11-07-ci-real-content/design.md) explains why.
 
 `update_requirement_rules` also parses each edited file before writing it, and leaves the file unchanged if anything besides the requirement's rules and status would change. The [design record](openspec/changes/archive/2026-11-07-safe-requirement-updates/design.md) explains why.
