@@ -5,6 +5,49 @@
 
 MCP (Model Context Protocol) server for the ComplianceAsCode/content project, enabling AI assistants like Claude to interact with security compliance automation workflows.
 
+## About this fork
+
+This fork of [ComplianceAsCode/content-mcp](https://github.com/ComplianceAsCode/content-mcp) fixes the places where the server misread current ComplianceAsCode content. Upstream has had no commits since March 2026. Each fix is a separate commit with tests, so it can go upstream as its own pull request.
+
+[![CI](https://github.com/realstuffie/content-mcp/actions/workflows/ci.yml/badge.svg?branch=fixes)](https://github.com/realstuffie/content-mcp/actions/workflows/ci.yml)
+[![Content drift](https://github.com/realstuffie/content-mcp/actions/workflows/content-drift.yml/badge.svg)](https://github.com/realstuffie/content-mcp/actions/workflows/content-drift.yml)
+
+Measured against ComplianceAsCode/content master at `f09d243` (2026-11-04):
+
+| Check | Upstream | This fork |
+|---|---|---|
+| `validate_control_file` on `cis_ubuntu2204` | 71 errors, 300 warnings | valid |
+| Real rules `validate_rule_yaml` reports invalid | 1060 of 2116 | 9 of 2530 |
+| `search_rules(product="ubuntu2204")` | 0 rules | 639 |
+| Profiles that lose selections when parsed | 125 of 321 | 0 |
+| Products selecting `accounts_umask_interactive_users` | 3 | 10 |
+| `stig_rhel9` | fails to parse | 448 requirements |
+| `pcidss_4` | 72 requirements | 351 |
+| `srg_gpos` / `nist_800_53` | 1 / 0 requirements | 203 / 1196 |
+| Rules that fail to load | 16 | 0 |
+| Rules `get_rule_details` crashes on | 6 | 0 |
+
+The 9 rules still reported invalid are OpenShift rules without a `documentation_complete` line. The validator requires it; the content build doesn't.
+
+Other changes:
+
+- `mcp` is capped below 2.0, because 2.x crashes the server on startup.
+- AI requests work with anthropic SDK 2.x, and the default model is `claude-sonnet-5-5`, replacing the retired `claude-3-5-sonnet-20241022`.
+- The profile index is shared between tool calls, so `get_rule_product_availability` takes about 0.1 seconds after the first call instead of about 15.
+- `jinja2` is a declared dependency, because ComplianceAsCode's `ssg` modules import it.
+- CI runs the integration tests on Python 3.11 to 3.14 against a pinned content commit, and a weekly job runs them against content master. The [CI design record](openspec/changes/archive/2026-11-07-ci-real-content/design.md) explains why.
+
+The larger changes have design records in [`openspec/changes/archive/`](openspec/changes/archive/), in the entries dated 2026-11-06 and 2026-11-07.
+
+The `fixes` branch holds all changes and is the default branch. `main` mirrors upstream. To use the fork, clone `https://github.com/realstuffie/content-mcp.git` and follow the installation steps below.
+
+Known gaps:
+
+- The server still needs porting to MCP SDK 2.x.
+- `get_requirement_file_path` and `update_requirement_rules` assume one requirement per file, which isn't true of the NIST 800-53 family files.
+- `get_template_schema` returns no parameters.
+- `get_product_details` reports every product type as `unknown`.
+
 ## Features
 
 - **Content Discovery**: Search and explore rules, profiles, products, and templates
