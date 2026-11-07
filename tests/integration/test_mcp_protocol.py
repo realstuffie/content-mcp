@@ -181,3 +181,63 @@ async def test_resource_parse_failure_uses_internal_error(mcp_session, protocol_
             await mcp_session.read_resource("cac://products/broken")
         assert error.value.error.code == -32603
         await mcp_session.send_ping()
+
+
+@pytest.mark.parametrize(
+    "name, arguments, message",
+    [
+        ("get_product_details", {}, "required property"),
+        ("get_product_details", {"product_id": 42}, "not of type"),
+        ("search_rules", {"limit": "three"}, "not of type"),
+        ("search_rules", {"severity": "critical"}, "not one of"),
+        ("get_rule_details", {"rule_id": RULE, "rendered_detail": "invalid"}, "not one of"),
+        ("unknown_tool", {}, "Unknown tool"),
+        ("get_product_details", {"product_id": "missing"}, "Product not found"),
+        ("get_rule_details", {"rule_id": "missing"}, "Rule not found"),
+        ("get_template_schema", {"template_name": "missing"}, "Template not found"),
+        ("get_profile_details", {"product": "rhel9", "profile_id": "missing"}, "Profile not found"),
+        ("get_control_details", {"control_id": "missing"}, "Control not found"),
+        ("get_control_stats", {"control_id": "missing"}, "Control not found"),
+        ("list_unmapped_requirements", {"control_id": "missing"}, "Control not found"),
+        ("get_rule_product_availability", {"rule_id": "missing"}, "Rule not found"),
+        (
+            "get_requirement_file_path",
+            {"control_id": "missing", "requirement_id": "R1"},
+            "not found",
+        ),
+        (
+            "get_rendered_rule",
+            {"product": "rhel9", "rule_id": "missing"},
+            "Rendered rule not found",
+        ),
+    ],
+)
+async def test_tool_errors_are_flagged(mcp_session, name, arguments, message):
+    async with mcp_session as mcp_session:
+        result = await mcp_session.call_tool(name, arguments)
+        assert result.isError
+        assert message in result.content[0].text
+        await mcp_session.send_ping()
+        assert not (await mcp_session.call_tool("list_products", {})).isError
+
+
+async def test_execution_failure_is_flagged(mcp_session, protocol_repo):
+    async with mcp_session as mcp_session:
+        product = protocol_repo / "products" / "broken"
+        product.mkdir()
+        (product / "product.yml").write_text("product: [\n")
+        result = await mcp_session.call_tool("get_product_details", {"product_id": "broken"})
+        assert result.isError
+        assert "Tool execution failed" in result.content[0].text
+        await mcp_session.send_ping()
+
+
+async def test_partial_discovery_warning_is_not_a_tool_error(mcp_session, protocol_repo):
+    product = protocol_repo / "products" / "broken"
+    product.mkdir()
+    (product / "product.yml").write_text("product: [\n")
+    async with mcp_session as mcp_session:
+        result = await mcp_session.call_tool("list_products", {})
+        assert not result.isError
+        assert "WARNING:" in result.content[0].text
+        assert _json_content(result)[0]["product_id"] == "rhel9"

@@ -725,7 +725,7 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
             product_id = arguments["product_id"]
             product = discovery.get_product_details(product_id)
             if not product:
-                return [{"type": "text", "text": f"Product not found: {product_id}"}]
+                raise ValueError(f"Product not found: {product_id}")
             return [{"type": "text", "text": json.dumps(product.model_dump(mode="json"), indent=2)}]
 
         elif name == "search_rules":
@@ -752,7 +752,7 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
 
             rule = discovery.get_rule_details(rule_id, include_rendered, product, rendered_detail)
             if not rule:
-                return [{"type": "text", "text": f"Rule not found: {rule_id}"}]
+                raise ValueError(f"Rule not found: {rule_id}")
 
             # Add informative message about rendered content
             result_json = json.dumps(rule.model_dump(mode="json"), indent=2)
@@ -783,7 +783,7 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
             template_name = arguments["template_name"]
             schema = discovery.get_template_schema(template_name)
             if not schema:
-                return [{"type": "text", "text": f"Template not found: {template_name}"}]
+                raise ValueError(f"Template not found: {template_name}")
             return [{"type": "text", "text": json.dumps(schema.model_dump(mode="json"), indent=2)}]
 
         elif name == "list_profiles":
@@ -801,12 +801,7 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
             product = arguments["product"]
             profile = discovery.get_profile_details(profile_id, product)
             if not profile:
-                return [
-                    {
-                        "type": "text",
-                        "text": f"Profile not found: {profile_id} in {product}",
-                    }
-                ]
+                raise ValueError(f"Profile not found: {profile_id} in {product}")
             return [{"type": "text", "text": json.dumps(profile.model_dump(mode="json"), indent=2)}]
 
         # Scaffolding tools
@@ -851,13 +846,10 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
             rule_id = arguments["rule_id"]
             rendered = discovery.get_rendered_rule(product, rule_id)
             if not rendered:
-                return [
-                    {
-                        "type": "text",
-                        "text": f"Rendered rule not found: {rule_id} for product {product}.\n"
-                        f"Make sure the product has been built (./build_product {product}).",
-                    }
-                ]
+                raise ValueError(
+                    f"Rendered rule not found: {rule_id} for product {product}.\n"
+                    f"Make sure the product has been built (./build_product {product})."
+                )
             return [
                 {"type": "text", "text": json.dumps(rendered.model_dump(mode="json"), indent=2)}
             ]
@@ -866,12 +858,7 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
             product = arguments["product"]
             info = discovery.get_datastream_info(product)
             if not info:
-                return [
-                    {
-                        "type": "text",
-                        "text": f"Datastream info not available for product: {product}",
-                    }
-                ]
+                raise ValueError(f"Datastream info not available for product: {product}")
             return [{"type": "text", "text": json.dumps(info.model_dump(mode="json"), indent=2)}]
 
         elif name == "search_rendered_content":
@@ -1091,7 +1078,7 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
             control = get_control_details(control_id, product=product)
 
             if not control:
-                return [{"type": "text", "text": f"Control not found: {control_id}"}]
+                raise ValueError(f"Control not found: {control_id}")
 
             summary = f"Control framework: {control.title}\n"
             summary += f"Requirements: {len(flatten_requirements(control.controls))}\n"
@@ -1115,7 +1102,7 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
             stats = get_control_stats(control_id, product=product)
 
             if not stats:
-                return [{"type": "text", "text": f"Control not found: {control_id}"}]
+                raise ValueError(f"Control not found: {control_id}")
 
             summary = (
                 f"Control: {stats.title}\n"
@@ -1209,7 +1196,7 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
             rule_id = arguments["rule_id"]
             availability = get_rule_product_availability(rule_id)
             if not availability:
-                return [{"type": "text", "text": f"Rule not found: {rule_id}"}]
+                raise ValueError(f"Rule not found: {rule_id}")
 
             summary = (
                 f"Product availability for rule '{rule_id}': "
@@ -1232,12 +1219,9 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
             result = get_requirement_file_path(control_id, requirement_id, product=product)
 
             if not result:
-                return [
-                    {
-                        "type": "text",
-                        "text": f"Requirement '{requirement_id}' not found in control '{control_id}'",
-                    }
-                ]
+                raise ValueError(
+                    f"Requirement '{requirement_id}' not found in control '{control_id}'"
+                )
 
             summary = (
                 f"Requirement '{requirement_id}' in '{control_id}': "
@@ -1261,7 +1245,7 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
             requirements = list_unmapped_requirements(control_id, status_filter, product=product)  # type: ignore[assignment]
 
             if requirements is None:
-                return [{"type": "text", "text": f"Control not found: {control_id}"}]
+                raise ValueError(f"Control not found: {control_id}")
 
             result = [r.model_dump(mode="json") for r in requirements]
             summary = f"Found {len(requirements)} unmapped requirements in '{control_id}'\n\n"
@@ -1288,8 +1272,7 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
             )
 
             if not result.success:
-                error_text = f"Update failed: {'; '.join(result.errors)}"
-                return [{"type": "text", "text": error_text}]
+                raise ValueError(f"Update failed: {'; '.join(result.errors)}")
 
             if result.requirements_unchanged:
                 summary = (
@@ -1322,8 +1305,8 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
 
     except Exception as e:
         logger.error(f"Tool execution failed: {e}", exc_info=True)
-        error_msg = f"Tool execution failed: {str(e)}"
-        return [{"type": "text", "text": error_msg}]
+        # The MCP SDK turns raised exceptions into CallToolResult(isError=True).
+        raise ValueError(f"Tool execution failed: {e}") from e
 
 
 def list_tools() -> list[dict[str, Any]]:

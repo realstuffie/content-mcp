@@ -872,22 +872,25 @@ List requirements in a control file that need rule mappings. Returns requirement
 }
 ```
 
-## Error Handling
+## Error handling
 
-All tools return structured error messages in the response:
+Tool execution failures return MCP content with `isError: true`:
 
 ```json
 {
-  "error": "Error message describing what went wrong",
-  "details": "Additional details if available"
+  "content": [
+    {
+      "type": "text",
+      "text": "Tool execution failed: Product not found: missing"
+    }
+  ],
+  "isError": true
 }
 ```
 
-Common errors:
-- Resource not found (e.g., invalid product_id, rule_id)
-- Invalid parameters (e.g., wrong severity value)
-- Validation failures
-- File system errors
+The SDK rejects arguments that do not match a tool's JSON Schema. A completed
+validation call reports invalid content in its normal result, with `valid: false`
+and `isError: false`. Resource reads use the JSON-RPC error codes described above.
 
 ## Usage Examples
 

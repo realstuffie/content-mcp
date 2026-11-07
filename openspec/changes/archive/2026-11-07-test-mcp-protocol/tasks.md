@@ -6,3 +6,4 @@
 - [x] 4. List parameterized resources as MCP URI templates. Include its session tests and documentation.
 - [x] 5. Reject extra segments in rendered-rule resource URIs. Include its session tests and documentation.
 - [x] 6. Distinguish missing resources from invalid URIs and read failures. Include its session tests and documentation.
+- [x] 7. Report failed MCP tool calls with isError. Include its session tests and documentation.

@@ -60,6 +60,17 @@ resources. Map them to JSON-RPC codes -32602 and -32002, and map other
 read failures to -32603. Missing-resource errors include the URI.
 Session tests check each code and verify recovery after a failed read.
 
+### Tool execution errors
+
+The tool dispatcher caught execution failures and returned their text
+as normal content. Missing objects and failed requirement updates did
+the same, so the SDK reported isError=false even when a call failed.
+
+Raise lookup and execution failures through the dispatcher so the SDK
+sets isError=true. Update the direct dispatcher tests and add session
+tests for schema rejection, failed lookups and parse errors. Completed
+validation calls and partial results with warnings remain successful.
+
 ## Verification
 
 Each implemented fix has a regression test through an MCP session.

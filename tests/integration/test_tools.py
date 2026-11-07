@@ -77,22 +77,14 @@ severity: invalid_severity
     async def test_tool_error_handling(self, real_content_repo):
         """Test tool error handling for missing parameters."""
         # Missing required parameter
-        result = await handle_tool_call("get_product_details", {})
-
-        assert len(result) == 1
-        assert result[0]["type"] == "text"
-
-        # Should contain error message
-        response = result[0]["text"]
-        assert "error" in response.lower() or "fail" in response.lower()
+        with pytest.raises(ValueError, match="Tool execution failed"):
+            await handle_tool_call("get_product_details", {})
 
     @pytest.mark.asyncio
     async def test_unknown_tool(self, real_content_repo):
         """Test calling unknown tool."""
-        result = await handle_tool_call("unknown_tool_name", {})
-
-        assert len(result) == 1
-        assert "Unknown tool" in result[0]["text"]
+        with pytest.raises(ValueError, match="Unknown tool"):
+            await handle_tool_call("unknown_tool_name", {})
 
     @pytest.mark.asyncio
     async def test_get_control_rule_index_tool(self, real_content_repo):
@@ -134,14 +126,11 @@ severity: invalid_severity
     @pytest.mark.asyncio
     async def test_get_rule_product_availability_tool_not_found(self, real_content_repo):
         """Test get_rule_product_availability tool with nonexistent rule."""
-        result = await handle_tool_call(
-            "get_rule_product_availability",
-            {"rule_id": "nonexistent_rule_xyz"},
-        )
-
-        assert len(result) == 1
-        assert result[0]["type"] == "text"
-        assert "not found" in result[0]["text"].lower() or "Rule not found" in result[0]["text"]
+        with pytest.raises(ValueError, match="Rule not found"):
+            await handle_tool_call(
+                "get_rule_product_availability",
+                {"rule_id": "nonexistent_rule_xyz"},
+            )
 
 
 class TestToolValidation:

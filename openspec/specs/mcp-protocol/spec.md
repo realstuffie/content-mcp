@@ -60,3 +60,14 @@ errors SHALL include the URI in their data.
 
 - **WHEN** a client requests an invalid URI, missing object or unparseable resource
 - **THEN** the error code identifies the failure and a later request in the session succeeds
+
+### Requirement: Tool execution errors
+
+Tool lookup and execution failures SHALL reach the SDK error handler
+and return isError=true. Completed validation calls and usable partial
+discovery results SHALL retain isError=false.
+
+#### Scenario: Tool execution errors
+
+- **WHEN** a client supplies invalid arguments or a tool cannot load the requested object
+- **THEN** the tool result flags the failure and a later valid call still succeeds

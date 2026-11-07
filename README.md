@@ -51,6 +51,8 @@ Other changes:
 - Rendered-rule resource URIs now reject path segments after the rule ID.
 - Resource errors now distinguish invalid URIs, missing content and read
   failures with JSON-RPC codes -32602, -32002 and -32603.
+- Failed tool calls now set isError. Completed validations and usable partial
+  discovery results with parse warnings remain successful.
   The [protocol design record](openspec/changes/archive/2026-11-07-test-mcp-protocol/design.md) describes these fixes.
 - AI requests work with anthropic SDK 2.x, and the default model is `claude-sonnet-5-5`, replacing the retired `claude-3-5-sonnet-20241022`.
 - The profile index is shared between tool calls, so `get_rule_product_availability` takes about 0.1 seconds after the first call instead of about 15.
