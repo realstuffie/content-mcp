@@ -5,7 +5,7 @@ The `TemplateSchema` Pydantic model SHALL include an optional `documentation` fi
 
 #### Scenario: Template has documentation in reference file
 - **WHEN** `get_template_schema` is called with a template name that has an entry in `docs/templates/template_reference.md`
-- **THEN** the returned `TemplateSchema` SHALL have its `documentation` field populated with the full markdown content of that template's section (from the `#### <template_name>` heading to the next `####` heading, exclusive)
+- **THEN** the returned `TemplateSchema` SHALL have its `documentation` field populated with the full markdown content of that template's section (from the `#### <template_name>` heading to the next heading, exclusive)
 
 #### Scenario: Template has no documentation in reference file
 - **WHEN** `get_template_schema` is called with a template name that has no entry in `docs/templates/template_reference.md`
@@ -16,7 +16,7 @@ The `TemplateSchema` Pydantic model SHALL include an optional `documentation` fi
 - **THEN** the returned `TemplateSchema` SHALL have its `documentation` field set to `None`
 
 ### Requirement: Documentation extraction parses by heading
-The system SHALL extract per-template documentation by locating the `#### <template_name>` heading in `docs/templates/template_reference.md` and collecting all content until the next `####` heading or end of file.
+The system SHALL extract per-template documentation by locating the `#### <template_name>` heading in `docs/templates/template_reference.md` and collecting all content until the next heading of level 1 to 4 or end of file. Lines inside fenced code blocks SHALL NOT count as headings.
 
 #### Scenario: Extract section for a known template
 - **WHEN** the reference file contains a section headed `#### sshd_lineinfile`

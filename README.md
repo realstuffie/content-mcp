@@ -29,6 +29,8 @@ Measured against ComplianceAsCode/content master at `f09d243` (2026-11-04):
 | `update_requirement_rules` on an `srg_gpos` requirement | file no longer parses | loads in the content build |
 | `update_requirement_rules` on `pcidss_4` requirement `1.2` | rewrites its nested requirements; file no longer parses | changes only `1.2` |
 | Statuses `update_requirement_rules` offers that the content build accepts | 3 of 5 | 10 of 10 |
+| Templates `get_template_schema` gives parameters for | 0 of 65 | 59 |
+| Templates with a description or an example | 0 of 65 | 49 / 58 |
 
 The 9 rules still reported invalid are OpenShift rules without a `documentation_complete` line. The validator requires it; the content build doesn't.
 
@@ -52,7 +54,6 @@ Known gaps:
 - The server still needs porting to MCP SDK 2.x.
 - `get_requirement_file_path` and `update_requirement_rules` assume one requirement per file, which isn't true of the NIST 800-53 family files.
 - `update_requirement_rules` refuses requirements whose rules use Jinja2 conditionals, such as two in `srg_gpos`. Those need a manual edit.
-- `get_template_schema` returns no parameters.
 - `get_product_details` reports every product type as `unknown`.
 
 Not maintained, on purpose:

@@ -1,6 +1,6 @@
 """Profile data models."""
 
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -94,6 +94,10 @@ class TemplateParameter(BaseModel):
     options: list[str] | None = Field(
         None, description="Valid options if parameter has enumerated values"
     )
+    used_by_rules: int | None = Field(
+        None,
+        description="Rules that set this parameter, counting product overrides such as name@rhel9",
+    )
 
 
 class TemplateSchema(BaseModel):
@@ -104,7 +108,15 @@ class TemplateSchema(BaseModel):
     parameters: list[TemplateParameter] = Field(
         default_factory=list, description="Template parameters"
     )
-    example_usage: dict[str, str] | None = Field(None, description="Example parameter values")
+    supported_languages: list[str] = Field(
+        default_factory=list,
+        description="Languages the template generates, from its template.yml",
+    )
+    used_by_rules: int = Field(0, description="Rules that use this template")
+    example_rule: str | None = Field(None, description="Rule that example_usage comes from")
+    example_usage: dict[str, Any] | None = Field(
+        None, description="The vars of a real rule that uses this template"
+    )
     documentation: str | None = Field(
         None, description="Template reference documentation from template_reference.md"
     )

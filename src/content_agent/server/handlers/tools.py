@@ -109,7 +109,7 @@ TOOLS = [
     },
     {
         "name": "get_template_schema",
-        "description": "Get parameter schema for a template",
+        "description": "Get a template's parameters, the languages it generates, and an example from a real rule. Parameters come from docs/templates/template_reference.md and from the vars of the rules that use the template, including parameters the reference leaves out; used_by_rules says how many rules set each one. Rules can set a value for one product with a name@product key, such as pkgname@ubuntu2204.",
         "inputSchema": {
             "type": "object",
             "properties": {
