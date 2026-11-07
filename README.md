@@ -20,7 +20,7 @@ Measured against ComplianceAsCode/content master at `f09d243` (2026-11-04):
 | Real rules `validate_rule_yaml` reports invalid | 1060 of 2116 | 0 of 2566 |
 | `search_rules(product="ubuntu2204")` | 0 rules | 639 |
 | Profiles that lose selections when parsed | 125 of 321 | 0 |
-| Products selecting `accounts_umask_interactive_users` | 3 | 10 |
+| Products selecting `accounts_umask_interactive_users` | 3 | 11 |
 | `stig_rhel9` | fails to parse | 448 requirements |
 | `pcidss_4` | 72 requirements | 351 |
 | `srg_gpos` / `nist_800_53` | 1 / 0 requirements | 203 / 1196 |

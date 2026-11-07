@@ -82,3 +82,7 @@ The system SHALL resolve each profile's selections into rule IDs the way the Com
 - **THEN** only the selected rules the expression accepts count as selected by that profile, after `extends` and unselections
 - **AND** the expression is evaluated with ComplianceAsCode's `ssg.utils.safe_eval_filter` against the rule's attributes, expanded with the product's variables: `id_`, `platform` (empty when unset), and `platforms`, which includes `platform`
 - **AND** a rule that can't be loaded or evaluated stays selected
+
+#### Scenario: Rules the product's build doesn't load
+- **WHEN** a profile selects, through a control file, a rule outside the directories the product's build reads (its `benchmark_root` and any `additional_content_directories`), or a rule marked `documentation_complete: false`
+- **THEN** the rule does not count as selected by that profile, as the build drops it from control selections

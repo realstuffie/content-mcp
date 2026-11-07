@@ -202,3 +202,21 @@ class TestFilterRules:
     def test_without_a_filter_function_nothing_is_filtered(self):
         profiles = {"p": (["node_rule_a", "platform_rule"], None, "node not in platform")}
         assert self._resolve(profiles, "p", rule_filter=None) == {"node_rule_a", "platform_rule"}
+
+
+class TestProductRules:
+    def _resolve(self, profiles, product_rules):
+        resolver = ProfileRuleResolver(
+            FilteredProfiles(profiles), FakeControls({"pol": POLICY}), product_rules=product_rules
+        )
+        return resolver.resolve_profile("prod", "p")
+
+    def test_rules_the_product_does_not_load_are_dropped(self):
+        # The build drops them from control selections
+        profiles = {"p": (["pol:all"], None, None)}
+        known = {"rule_l1", "rule_l2"}
+        assert self._resolve(profiles, lambda product: known) == {"rule_l1", "rule_l2"}
+
+    def test_unknown_product_rules_keep_everything(self):
+        profiles = {"p": (["rule_a", "rule_b"], None, None)}
+        assert self._resolve(profiles, lambda product: None) == {"rule_a", "rule_b"}

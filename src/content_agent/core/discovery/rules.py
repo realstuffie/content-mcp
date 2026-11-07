@@ -17,7 +17,7 @@ from typing import Any
 
 import yaml
 
-from content_agent.core.discovery.rule_paths import rule_files
+from content_agent.core.discovery.rule_paths import product_rule_ids, rule_files
 from content_agent.core.integration import get_content_repository
 from content_agent.core.integration.product_variables import load_product_variables
 from content_agent.core.integration.ssg_modules import get_ssg_modules
@@ -340,7 +340,21 @@ class RuleDiscovery:
         self._profile_rule_index = {}
 
         profile_discovery = ProfileDiscovery()
-        resolver = ProfileRuleResolver(profile_discovery, rule_filter=self._profile_rule_filter())
+        product_rules: dict[str, set[str] | None] = {}
+        directory_rules: dict[Path, set[str]] = {}
+
+        def known_rules(product: str) -> set[str] | None:
+            if product not in product_rules:
+                product_rules[product] = product_rule_ids(
+                    self.content_repo.path, product, directory_rules
+                )
+            return product_rules[product]
+
+        resolver = ProfileRuleResolver(
+            profile_discovery,
+            rule_filter=self._profile_rule_filter(),
+            product_rules=known_rules,
+        )
         profiles_result = profile_discovery.list_profiles()
 
         for profile_summary in profiles_result.items:

@@ -12,6 +12,8 @@ This follows the ComplianceAsCode build (``ssg.entities.profile`` and
   requirements, and the rules of the requirements it references.
 - ``extends`` adds the parent profile's rules, and ``!rule`` entries remove rules.
 - Variable assignments and refinements (entries containing ``=``) select nothing.
+- Only rules the product's build loads count, when the product's rules are
+  known: the build drops the others from control selections.
 - A profile's ``filter_rules`` expression, when a rule filter is given, keeps only
   the rules it accepts. As in the build, it applies after ``extends`` and
   unselections, to the parent's rules too, and the parent's own filter has
@@ -41,6 +43,7 @@ class ProfileRuleResolver:
         profile_discovery: Any,
         control_discovery: Any | None = None,
         rule_filter: Callable[[str, str, str], bool] | None = None,
+        product_rules: Callable[[str], set[str] | None] | None = None,
     ) -> None:
         """
         Args:
@@ -49,10 +52,13 @@ class ProfileRuleResolver:
             rule_filter: Called with (product, rule_id, filter_rules expression);
                 returns whether the profile keeps the rule. Without it,
                 filter_rules is not applied.
+            product_rules: Called with a product; returns the IDs of the rules
+                the build loads for it, or None when unknown.
         """
         self._profiles = profile_discovery
         self._controls = control_discovery
         self._rule_filter = rule_filter
+        self._product_rules = product_rules
         self._policy_cache: dict[tuple[str, str], ControlFile | None] = {}
         self._control_rules_cache: dict[tuple[str, str, str], set[str]] = {}
         self._profile_cache: dict[tuple[str, str], set[str]] = {}
@@ -93,6 +99,9 @@ class ProfileRuleResolver:
             selected |= self._resolve_profile(product, details.extends, visiting | {key})
 
         result = selected - unselected
+        known = self._product_rules(product) if self._product_rules is not None else None
+        if known is not None:
+            result &= known
         expression = getattr(details, "filter_rules", None)
         if expression and self._rule_filter is not None:
             rule_filter = self._rule_filter

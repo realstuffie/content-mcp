@@ -87,3 +87,17 @@ class TestProfileFilterRulesWithRealContent:
             assert ours.resolve_profile("ocp4", profile_id) == theirs.resolve_profile(
                 "ocp4", profile_id
             )
+
+
+@requires_content_repo
+class TestProductRuleSetsWithRealContent:
+    def test_profiles_only_count_rules_their_product_loads(self, real_content_repo):
+        from content_agent.core.discovery.rules import RuleDiscovery
+
+        # ocp4 control files list Linux audit rules, but ocp4 reads its rules from
+        # applications/, so the build drops them from ocp4's profiles
+        availability = RuleDiscovery().get_rule_product_availability("audit_access_failed")
+
+        assert availability is not None
+        assert "ocp4" not in availability.products_in_profiles
+        assert "rhel9" in availability.products_in_profiles
