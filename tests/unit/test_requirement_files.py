@@ -97,3 +97,40 @@ def test_requirement_files_are_expanded_with_product_variables(tmp_path):
     assert control is not None
     assert control.controls[0].title == "Ubuntu 22.04 must"
     assert calls == [{"product": "ubuntu2204", "full_name": "Ubuntu 22.04"}]
+
+
+def test_directory_named_after_control_file_without_controls_dir(tmp_path):
+    # ComplianceAsCode reads controls/<id>/ even when the control file sets no
+    # controls_dir, as cis_ocp and srg_ctr rely on
+    controls_dir = tmp_path / "controls"
+    _write(
+        controls_dir / "pol.yml",
+        {"id": "pol", "title": "Policy", "controls": [{"id": "inline", "title": "Inline"}]},
+    )
+    _write(
+        controls_dir / "pol" / "section_1.yml",
+        {"controls": [{"id": "1.1", "title": "First"}, {"id": "1.2", "title": "Second"}]},
+    )
+    _write(controls_dir / "pol" / ".hidden.yml", {"controls": [{"id": "hidden", "title": "No"}]})
+
+    with _no_ssg():
+        control = _discovery(tmp_path).parse_control_file(controls_dir / "pol.yml")
+
+    assert control is not None
+    assert [c.id for c in control.controls] == ["inline", "1.1", "1.2"]
+
+
+def test_main_file_requirements_kept_with_controls_dir(tmp_path):
+    # srg_gpos keeps one requirement in the main file and the rest in its directory
+    controls_dir = tmp_path / "controls"
+    _write(
+        controls_dir / "pol.yml",
+        {**CONTROL_FILE, "controls": [{"id": "Variables", "title": "Variables"}]},
+    )
+    _write(controls_dir / "pol" / "SRG-1.yml", {"controls": [{"id": "SRG-1", "title": "One"}]})
+
+    with _no_ssg():
+        control = _discovery(tmp_path).parse_control_file(controls_dir / "pol.yml")
+
+    assert control is not None
+    assert [c.id for c in control.controls] == ["Variables", "SRG-1"]

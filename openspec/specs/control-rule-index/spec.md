@@ -36,6 +36,15 @@ The system SHALL recursively flatten nested control structures when building the
 - **WHEN** a control file uses `controls_dir` to reference a subdirectory of individual control YAML files
 - **THEN** the requirements from those files are loaded and included in the index
 
+#### Scenario: Directory named after the control file
+- **WHEN** a control file sets no `controls_dir` and a directory with the same name exists next to it, such as `controls/cis_ocp/` next to `controls/cis_ocp.yml`
+- **THEN** the requirements from the `.yml` files in that directory are loaded, as ComplianceAsCode loads them
+- **AND** files whose names start with a dot are skipped
+
+#### Scenario: Requirements in both the control file and its directory
+- **WHEN** a control file has its own `controls` list and a requirement directory, like `srg_gpos`
+- **THEN** the requirements from both are loaded, the control file's first
+
 #### Scenario: Requirement files with a controls list
 - **WHEN** a file in the `controls_dir` subdirectory holds its requirements in a top-level `controls` list, like the NIST 800-53 family files
 - **THEN** every requirement in that list is loaded

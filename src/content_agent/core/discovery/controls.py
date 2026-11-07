@@ -30,6 +30,23 @@ GENERIC_SUBSTITUTIONS: dict[str, Any] = {
 }
 
 
+def requirements_directory(control_file: Path, data: Any) -> Path | None:
+    """Return the directory holding a policy's requirement files, if it has one.
+
+    Like ComplianceAsCode, this is the `controls_dir` the control file names, and
+    otherwise the directory named after the control file, such as controls/cis_ocp/
+    next to controls/cis_ocp.yml.
+    """
+    subdir = data.get("controls_dir") if isinstance(data, dict) else None
+    directory = control_file.parent / str(subdir) if subdir else control_file.with_suffix("")
+    return directory if directory.is_dir() else None
+
+
+def requirement_files(directory: Path) -> list[Path]:
+    """Return the requirement files ComplianceAsCode reads from a policy's directory."""
+    return sorted(path for path in directory.glob("*.yml") if not path.name.startswith("."))
+
+
 def load_control_yaml(file_path: Path, substitutions: dict[str, Any]) -> Any:
     """Load a control or requirement file, expanding Jinja2 with ``substitutions``.
 
@@ -221,24 +238,22 @@ class ControlDiscovery:
 
                 data["controls"] = controls
 
-            # Handle controls_dir pattern (subdirectory of individual control YAML files)
-            elif "controls_dir" in data and data["controls_dir"]:
-                controls = []
-                controls_subdir = file_path.parent / data["controls_dir"]
-                if controls_subdir.exists() and controls_subdir.is_dir():
-                    for ctrl_file in sorted(controls_subdir.glob("*.yml")):
+            # Requirement files in the policy's directory, added to its own controls list
+            else:
+                directory = requirements_directory(file_path, data)
+                if directory is not None:
+                    controls = []
+                    for ctrl_file in requirement_files(directory):
                         try:
                             controls.extend(self._parse_requirement_file(ctrl_file, product))
                         except Exception as e:
                             error_msg = f"Failed to parse requirement file {ctrl_file}: {e}"
                             logger.warning(error_msg)
                             parse_errors.append(error_msg)
-                else:
-                    logger.warning(f"Controls directory not found: {controls_subdir}")
-
-                if "controls" not in data:
-                    data["controls"] = []
-                data["controls"].extend(controls)
+                    data["controls"] = list(data.get("controls") or []) + controls
+                elif data.get("controls_dir"):
+                    missing = file_path.parent / data["controls_dir"]
+                    logger.warning(f"Controls directory not found: {missing}")
 
             data["parse_errors"] = parse_errors
 

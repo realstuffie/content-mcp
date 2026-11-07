@@ -24,6 +24,8 @@ Measured against ComplianceAsCode/content master at `f09d243` (2026-11-04):
 | `stig_rhel9` | fails to parse | 448 requirements |
 | `pcidss_4` | 72 requirements | 351 |
 | `srg_gpos` / `nist_800_53` | 1 / 0 requirements | 203 / 1196 |
+| Policies whose requirement count matches the content build | 47 of 70 | 70 of 70 |
+| Rules the `ocp4` CIS profile selects | 0 | 199 |
 | Rules that fail to load | 16 | 0 |
 | Rules `get_rule_details` crashes on | 6 | 0 |
 | Rules the server can find | 2530 of 2566 | 2566 (adds the 36 Firefox rules) |
