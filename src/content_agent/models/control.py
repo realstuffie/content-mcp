@@ -2,9 +2,24 @@
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, Field, model_validator
+
+# The statuses ComplianceAsCode accepts (shared/schemas/control.json)
+ControlStatus = Literal[
+    "automated",
+    "documentation",
+    "does not meet",
+    "inherently met",
+    "manual",
+    "not applicable",
+    "partial",
+    "pending",
+    "planned",
+    "supported",
+]
+CONTROL_STATUSES: tuple[str, ...] = get_args(ControlStatus)
 
 
 class ControlRequirement(BaseModel):
@@ -30,18 +45,7 @@ class ControlRequirement(BaseModel):
         default_factory=list,
         description="Rule IDs that are related but not directly implementing",
     )
-    status: Literal[
-        "automated",
-        "documentation",
-        "does not meet",
-        "inherently met",
-        "manual",
-        "not applicable",
-        "partial",
-        "pending",
-        "planned",
-        "supported",
-    ] = Field(
+    status: ControlStatus = Field(
         default="pending",
         description="Implementation status of this control",
     )
@@ -439,4 +443,8 @@ class ControlUpdateResult(BaseModel):
     errors: list[str] = Field(
         default_factory=list,
         description="Errors encountered",
+    )
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Problems that did not stop the update",
     )

@@ -26,6 +26,9 @@ Measured against ComplianceAsCode/content master at `f09d243` (2026-11-04):
 | `srg_gpos` / `nist_800_53` | 1 / 0 requirements | 203 / 1196 |
 | Rules that fail to load | 16 | 0 |
 | Rules `get_rule_details` crashes on | 6 | 0 |
+| `update_requirement_rules` on an `srg_gpos` requirement | file no longer parses | loads in the content build |
+| `update_requirement_rules` on `pcidss_4` requirement `1.2` | rewrites its nested requirements; file no longer parses | changes only `1.2` |
+| Statuses `update_requirement_rules` offers that the content build accepts | 3 of 5 | 10 of 10 |
 
 The 9 rules still reported invalid are OpenShift rules without a `documentation_complete` line. The validator requires it; the content build doesn't.
 
@@ -37,6 +40,8 @@ Other changes:
 - `jinja2` is a declared dependency, because ComplianceAsCode's `ssg` modules import it.
 - CI runs the integration tests on Python 3.11 to 3.14 against a pinned content commit, and a weekly job runs them against content master. The [CI design record](openspec/changes/archive/2026-11-07-ci-real-content/design.md) explains why.
 
+`update_requirement_rules` also parses each edited file before writing it, and leaves the file unchanged if anything besides the requirement's rules and status would change. The [design record](openspec/changes/archive/2026-11-07-safe-requirement-updates/design.md) explains why.
+
 The larger changes have design records in [`openspec/changes/archive/`](openspec/changes/archive/), in the entries dated 2026-11-06 and 2026-11-07.
 
 The `fixes` branch holds all changes and is the default branch. `main` mirrors upstream. To use the fork, clone `https://github.com/realstuffie/content-mcp.git` and follow the installation steps below.
@@ -45,6 +50,7 @@ Known gaps:
 
 - The server still needs porting to MCP SDK 2.x.
 - `get_requirement_file_path` and `update_requirement_rules` assume one requirement per file, which isn't true of the NIST 800-53 family files.
+- `update_requirement_rules` refuses requirements whose rules use Jinja2 conditionals, such as two in `srg_gpos`. Those need a manual edit.
 - `get_template_schema` returns no parameters.
 - `get_product_details` reports every product type as `unknown`.
 

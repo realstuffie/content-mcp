@@ -5,8 +5,10 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import yaml
 
 from content_agent.core.scaffolding.control_updater import ControlUpdater
+from content_agent.models.control import CONTROL_STATUSES
 
 
 def _write_inline_control(tmp_path: Path, control_id: str, content: str) -> Path:
@@ -498,3 +500,336 @@ class TestEdgeCases:
         assert result.requirements_unchanged == 0
         assert result.errors == []
         assert result.file_path == tmp_path / "controls" / "test.yml"
+
+
+def _requirement(content: str, requirement_id: str) -> dict:
+    """Return a requirement from parsed control YAML, searching nested controls."""
+
+    def find(controls: list) -> dict | None:
+        for item in controls or []:
+            if str(item.get("id")) == requirement_id:
+                return item
+            found = find(item.get("controls", []))
+            if found is not None:
+                return found
+        return None
+
+    found = find(yaml.safe_load(content)["controls"])
+    assert found is not None, requirement_id
+    return found
+
+
+class TestRequirementStructure:
+    """Only the requirement's own rules and status keys change."""
+
+    def test_wide_dash_indent(self, updater: ControlUpdater, tmp_path: Path) -> None:
+        # The srg_gpos requirement files use `-   id:`, with keys four columns in
+        _write_inline_control(
+            tmp_path,
+            "test",
+            """\
+            controls:
+                -   id: R1
+                    title: First
+                    status: does not meet
+            """,
+        )
+
+        result = updater.update_requirement_rules("test", "R1", ["rule_a"], "automated")
+
+        assert result.success, result.errors
+        content = (tmp_path / "controls" / "test.yml").read_text()
+        requirement = _requirement(content, "R1")
+        assert requirement["rules"] == ["rule_a"]
+        assert requirement["status"] == "automated"
+        assert requirement["title"] == "First"
+
+    def test_parent_update_leaves_nested_requirements(
+        self, updater: ControlUpdater, tmp_path: Path
+    ) -> None:
+        _write_inline_control(
+            tmp_path,
+            "test",
+            """\
+            controls:
+                - id: '1'
+                  title: Parent
+                  status: pending
+                  controls:
+                      - id: '1.1'
+                        title: Child
+                        status: automated
+                        rules:
+                            - child_rule
+            """,
+        )
+
+        result = updater.update_requirement_rules("test", "1", ["parent_rule"], "manual")
+
+        assert result.success, result.errors
+        content = (tmp_path / "controls" / "test.yml").read_text()
+        parent = _requirement(content, "1")
+        child = _requirement(content, "1.1")
+        assert parent["rules"] == ["parent_rule"]
+        assert parent["status"] == "manual"
+        assert child["rules"] == ["child_rule"]
+        assert child["status"] == "automated"
+        # The new key goes before the nested requirements
+        assert content.index("parent_rule") < content.index("  controls:")
+
+    def test_status_text_in_block_scalar_untouched(
+        self, updater: ControlUpdater, tmp_path: Path
+    ) -> None:
+        _write_inline_control(
+            tmp_path,
+            "test",
+            """\
+            controls:
+                - id: R1
+                  description: |-
+                      Report the status of the service.
+                      status: pending
+                      rules: are written by hand
+                  status: pending
+            """,
+        )
+
+        result = updater.update_requirement_rules("test", "R1", ["rule_a"], "automated")
+
+        assert result.success, result.errors
+        requirement = _requirement((tmp_path / "controls" / "test.yml").read_text(), "R1")
+        assert requirement["description"] == (
+            "Report the status of the service.\nstatus: pending\nrules: are written by hand"
+        )
+        assert requirement["status"] == "automated"
+        assert requirement["rules"] == ["rule_a"]
+
+    def test_comment_inside_rules_list(self, updater: ControlUpdater, tmp_path: Path) -> None:
+        # The old rules after a comment used to be kept below the new ones
+        _write_inline_control(
+            tmp_path,
+            "test",
+            """\
+            controls:
+                - id: R1
+                  rules:
+                      # file permissions
+                      - old_rule_a
+                      - old_rule_b
+                  status: automated
+            """,
+        )
+
+        result = updater.update_requirement_rules("test", "R1", ["rule_a"], "automated")
+
+        assert result.success, result.errors
+        content = (tmp_path / "controls" / "test.yml").read_text()
+        assert _requirement(content, "R1")["rules"] == ["rule_a"]
+        assert "old_rule" not in content
+
+    def test_blank_line_between_requirements_kept(
+        self, updater: ControlUpdater, tmp_path: Path
+    ) -> None:
+        _write_inline_control(
+            tmp_path,
+            "test",
+            """\
+            controls:
+                - id: R1
+                  rules:
+                      - old_rule
+
+                - id: R2
+                  rules: []
+            """,
+        )
+
+        result = updater.update_requirement_rules("test", "R1", ["rule_a"], "automated")
+
+        assert result.success, result.errors
+        content = (tmp_path / "controls" / "test.yml").read_text()
+        assert "\n\n    - id: R2" in content
+
+    def test_file_without_trailing_newline(self, updater: ControlUpdater, tmp_path: Path) -> None:
+        controls_dir = tmp_path / "controls"
+        controls_dir.mkdir()
+        (controls_dir / "test.yml").write_text("controls:\n    - id: R1\n      title: First")
+
+        result = updater.update_requirement_rules("test", "R1", ["rule_a"], "automated")
+
+        assert result.success, result.errors
+        requirement = _requirement((controls_dir / "test.yml").read_text(), "R1")
+        assert requirement == {
+            "id": "R1",
+            "title": "First",
+            "rules": ["rule_a"],
+            "status": "automated",
+        }
+
+
+class TestStatuses:
+    """The tool writes only statuses ComplianceAsCode accepts."""
+
+    @pytest.mark.parametrize("status", CONTROL_STATUSES)
+    def test_canonical_statuses_written(
+        self, updater: ControlUpdater, tmp_path: Path, status: str
+    ) -> None:
+        _write_inline_control(
+            tmp_path,
+            "test",
+            """\
+            controls:
+                - id: R1
+                  status: pending
+            """,
+        )
+
+        result = updater.update_requirement_rules("test", "R1", ["rule_a"], status)
+
+        assert result.success, result.errors
+        requirement = _requirement((tmp_path / "controls" / "test.yml").read_text(), "R1")
+        assert requirement["status"] == status
+
+    @pytest.mark.parametrize(
+        ("status", "replacement"),
+        [("not_applicable", "not applicable"), ("partially_automated", "partial")],
+    )
+    def test_renamed_statuses_rejected_with_hint(
+        self, updater: ControlUpdater, tmp_path: Path, status: str, replacement: str
+    ) -> None:
+        original = "controls:\n    - id: R1\n      status: pending\n"
+        controls_dir = tmp_path / "controls"
+        controls_dir.mkdir()
+        (controls_dir / "test.yml").write_text(original)
+
+        result = updater.update_requirement_rules("test", "R1", ["rule_a"], status)
+
+        assert not result.success
+        assert f"Use '{replacement}' instead" in result.errors[0]
+        assert (controls_dir / "test.yml").read_text() == original
+
+    def test_tool_schema_lists_canonical_statuses(self) -> None:
+        from content_agent.server.handlers.tools import TOOLS
+
+        tool = next(t for t in TOOLS if t["name"] == "update_requirement_rules")
+        schema = tool["inputSchema"]
+        assert isinstance(schema, dict)
+        assert schema["properties"]["status"]["enum"] == list(CONTROL_STATUSES)
+
+
+class TestEditChecks:
+    """Edits that can't be made safely are refused and the file is left alone."""
+
+    def test_jinja_conditionals_in_rules_refused(
+        self, updater: ControlUpdater, tmp_path: Path
+    ) -> None:
+        original = textwrap.dedent("""\
+            controls:
+                - id: R1
+                  rules:
+                      - common_rule
+                      {{% if 'ubuntu' in product %}}
+                      - ubuntu_rule
+                      {{% endif %}}
+                  status: automated
+            """)
+        controls_dir = tmp_path / "controls"
+        controls_dir.mkdir()
+        (controls_dir / "test.yml").write_text(original)
+
+        result = updater.update_requirement_rules("test", "R1", ["rule_a"], "automated")
+
+        assert not result.success
+        assert "Jinja2 conditionals" in result.errors[0]
+        assert (controls_dir / "test.yml").read_text() == original
+
+    def test_requirement_split_by_jinja_refused(
+        self, updater: ControlUpdater, tmp_path: Path
+    ) -> None:
+        original = textwrap.dedent("""\
+            controls:
+                - id: R1
+                  title: First
+            {{% if product == "rhel9" %}}
+                  rules:
+                      - rhel_rule
+            {{% endif %}}
+                  status: automated
+            """)
+        controls_dir = tmp_path / "controls"
+        controls_dir.mkdir()
+        (controls_dir / "test.yml").write_text(original)
+
+        result = updater.update_requirement_rules("test", "R1", ["rule_a"], "automated")
+
+        assert not result.success
+        assert "split by Jinja2 conditionals" in result.errors[0]
+        assert (controls_dir / "test.yml").read_text() == original
+
+    def test_edit_that_would_not_parse_is_not_written(
+        self, updater: ControlUpdater, tmp_path: Path
+    ) -> None:
+        original = "controls:\n    - id: R1\n      status: pending\n"
+        controls_dir = tmp_path / "controls"
+        controls_dir.mkdir()
+        (controls_dir / "test.yml").write_text(original)
+
+        with patch.object(
+            updater, "_update_requirement_in_text", return_value="controls:\n  - id: R1\n   x: [\n"
+        ):
+            result = updater.update_requirement_rules("test", "R1", ["rule_a"], "automated")
+
+        assert not result.success
+        assert "would not parse" in result.errors[0]
+        assert (controls_dir / "test.yml").read_text() == original
+
+    def test_edit_that_changes_other_requirements_is_not_written(
+        self, updater: ControlUpdater, tmp_path: Path
+    ) -> None:
+        original = (
+            "controls:\n"
+            "    - id: R1\n      status: pending\n"
+            "    - id: R2\n      status: pending\n      rules:\n          - keep_me\n"
+        )
+        clobbered = (
+            "controls:\n"
+            "    - id: R1\n      status: automated\n      rules:\n          - rule_a\n"
+            "    - id: R2\n      status: automated\n      rules:\n          - rule_a\n"
+        )
+        controls_dir = tmp_path / "controls"
+        controls_dir.mkdir()
+        (controls_dir / "test.yml").write_text(original)
+
+        with patch.object(updater, "_update_requirement_in_text", return_value=clobbered):
+            result = updater.update_requirement_rules("test", "R1", ["rule_a"], "automated")
+
+        assert not result.success
+        assert "would change more" in result.errors[0]
+        assert (controls_dir / "test.yml").read_text() == original
+
+    def test_unparseable_original_written_with_warning(
+        self, updater: ControlUpdater, tmp_path: Path
+    ) -> None:
+        # Without ComplianceAsCode's Jinja2 expansion, an unquoted {{{ }}} doesn't parse
+        _write_inline_control(
+            tmp_path,
+            "test",
+            """\
+            controls:
+                - id: R1
+                  title: {{{ full_name }}} must log in
+                  status: pending
+            """,
+        )
+
+        with patch(
+            "content_agent.core.discovery.controls.get_ssg_modules",
+            side_effect=RuntimeError("SSG modules not initialized"),
+        ):
+            result = updater.update_requirement_rules("test", "R1", ["rule_a"], "automated")
+
+        assert result.success, result.errors
+        assert result.warnings and "could not be checked" in result.warnings[0]
+        content = (tmp_path / "controls" / "test.yml").read_text()
+        assert "    - rule_a" in content
+        assert "status: automated" in content

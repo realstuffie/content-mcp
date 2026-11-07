@@ -7,7 +7,7 @@ from typing import Any
 
 from content_agent.core import discovery, scaffolding
 from content_agent.core.parsing.base_parser import BaseParser
-from content_agent.models.control import DocumentSection
+from content_agent.models.control import CONTROL_STATUSES, DocumentSection
 
 logger = logging.getLogger(__name__)
 
@@ -599,7 +599,7 @@ TOOLS = [
     # Scaffolding tools - write operations
     {
         "name": "update_requirement_rules",
-        "description": "Update the rules list and status for a specific requirement in a control file. Handles both inline (monolithic YAML) and directory-based (controls_dir) formats. Preserves Jinja2 templating, comments, and formatting.",
+        "description": "Update the rules list and status for a specific requirement in a control file. Handles both inline (monolithic YAML) and directory-based (controls_dir) formats. Preserves Jinja2 templating, comments, and formatting, and changes only the requirement's own rules and status, not those of nested requirements. The edited file is parsed before it is written; if anything else would change, the file is left unchanged and an error is returned. Requirements whose rules use Jinja2 conditionals are refused.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -618,14 +618,8 @@ TOOLS = [
                 },
                 "status": {
                     "type": "string",
-                    "enum": [
-                        "automated",
-                        "partially_automated",
-                        "manual",
-                        "not_applicable",
-                        "pending",
-                    ],
-                    "description": "Status to set (default: 'automated')",
+                    "enum": list(CONTROL_STATUSES),
+                    "description": "ComplianceAsCode control status to set (default: 'automated')",
                 },
                 "product": {
                     "type": "string",
@@ -1284,8 +1278,11 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[Any]:
                 f"Updated requirement '{requirement_id}' in '{control_id}'\n"
                 f"Rules set: {rules}\n"
                 f"Status: {status}\n"
-                f"File: {result.file_path}\n\n"
+                f"File: {result.file_path}\n"
             )
+            if result.warnings:
+                summary += "Warnings: " + "; ".join(result.warnings) + "\n"
+            summary += "\n"
             return [
                 {
                     "type": "text",

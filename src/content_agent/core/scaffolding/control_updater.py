@@ -2,21 +2,89 @@
 
 import logging
 import re
+import tempfile
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 import yaml
 
+from content_agent.core.discovery.controls import GENERIC_SUBSTITUTIONS, load_control_yaml
 from content_agent.core.integration import get_content_repository
-from content_agent.models.control import ControlUpdateResult
+from content_agent.core.integration.product_variables import load_product_variables
+from content_agent.core.integration.ssg_modules import get_ssg_modules
+from content_agent.models.control import CONTROL_STATUSES, ControlUpdateResult
 
 logger = logging.getLogger(__name__)
 
-VALID_STATUSES = frozenset(
-    {"automated", "partially_automated", "manual", "not_applicable", "pending"}
-)
+VALID_STATUSES = frozenset(CONTROL_STATUSES)
 
-# Matches `- id: VALUE` with optional quoting and flexible whitespace
-_ID_PATTERN = re.compile(r"^(\s*)-\s+id:\s+['\"]?(?P<req_id>[^'\"#\n]+?)['\"]?\s*(?:#.*)?$")
+# Status names this tool used to accept, and the ComplianceAsCode status to use instead
+_RENAMED_STATUSES = {
+    "partially_automated": "partial",
+    "not_applicable": "not applicable",
+}
+
+# Matches `- id: VALUE` and `-   id: VALUE`, with optional quoting
+_ID_PATTERN = re.compile(
+    r"^(?P<dash_indent> *)-(?P<gap> +)id:\s+['\"]?(?P<req_id>[^'\"#\n]+?)['\"]?\s*(?:#.*)?$"
+)
+_KEY_PATTERN = re.compile(r"^(?P<indent> *)(?P<key>[A-Za-z_][\w-]*):(?:\s|$)")
+_JINJA_STATEMENT = re.compile(r"^\s*\{\{?%")
+_CONTROLS_DIR_PATTERN = re.compile(r"^controls_dir:\s*['\"]?(?P<subdir>[^'\"\s#]+)", re.MULTILINE)
+
+
+class _UpdateRefused(Exception):
+    """The requirement can't be edited safely as text."""
+
+
+def _indent(line: str) -> int:
+    return len(line) - len(line.lstrip(" "))
+
+
+def _is_blank(line: str) -> bool:
+    return not line.strip()
+
+
+def _plain(value: Any) -> Any:
+    """Copy parsed YAML into plain dicts and lists, so key order doesn't matter."""
+    if isinstance(value, Mapping):
+        return {key: _plain(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_plain(item) for item in value]
+    return value
+
+
+def _same_id(value: Any, requirement_id: str) -> bool:
+    if value is None:
+        return False
+    if value == requirement_id or str(value) == requirement_id:
+        return True
+    try:
+        # An id like 1.10 is parsed as the number 1.1
+        return bool(value == yaml.safe_load(requirement_id))
+    except yaml.YAMLError:
+        return False
+
+
+def _find_requirement(controls: Any, requirement_id: str) -> dict[str, Any] | None:
+    """Find a requirement in a parsed `controls` list, at any nesting depth."""
+    if not isinstance(controls, list):
+        return None
+    for item in controls:
+        if not isinstance(item, dict):
+            continue
+        if _same_id(item.get("id"), requirement_id):
+            return item
+        found = _find_requirement(item.get("controls"), requirement_id)
+        if found is not None:
+            return found
+    return None
+
+
+def _first_line(error: Exception) -> str:
+    text = str(error).strip()
+    return text.splitlines()[0] if text else type(error).__name__
 
 
 class ControlUpdater:
@@ -35,28 +103,21 @@ class ControlUpdater:
     ) -> ControlUpdateResult:
         """Update rules and status for a specific requirement.
 
-        Handles both inline and directory-based control files.
-        Uses text-based editing to preserve Jinja2, comments, and formatting.
+        Handles both inline and directory-based control files. Edits the text so
+        Jinja2, comments, and formatting are kept, and only the requirement's own
+        `rules` and `status` keys change; nested requirements are left alone. The
+        edited text is parsed before it is written, and the file is left unchanged
+        if anything else would change.
 
         Args:
             control_id: Control framework identifier
             requirement_id: Requirement identifier
             rules: List of rule IDs to set
-            status: Status to set (default: "automated")
+            status: A ComplianceAsCode control status (default: "automated")
             product: Optional product ID to scope to product-specific controls
         """
         if status not in VALID_STATUSES:
-            return ControlUpdateResult(
-                file_path=Path("."),
-                requirements_added=0,
-                requirements_updated=0,
-                requirements_unchanged=0,
-                success=False,
-                errors=[
-                    f"Invalid status '{status}'. "
-                    f"Must be one of: {', '.join(sorted(VALID_STATUSES))}"
-                ],
-            )
+            return self._failure(Path("."), self._invalid_status_message(status))
 
         # Resolve control file path
         if product is not None:
@@ -70,99 +131,69 @@ class ControlUpdater:
             control_file = candidate if candidate.exists() else None
 
         if control_file is None:
-            return ControlUpdateResult(
-                file_path=Path("."),
-                requirements_added=0,
-                requirements_updated=0,
-                requirements_unchanged=0,
-                success=False,
-                errors=[f"Control file not found: {control_id}"],
-            )
+            return self._failure(Path("."), f"Control file not found: {control_id}")
 
-        # Determine format by checking for controls_dir field
-        with open(control_file) as f:
-            data = yaml.safe_load(f)
-
-        if data.get("controls_dir"):
-            return self._update_directory_format(
-                control_file.parent, data["controls_dir"], requirement_id, rules, status
-            )
+        substitutions = self._substitutions(product)
+        controls_subdir = self._controls_dir(control_file, substitutions)
+        if controls_subdir:
+            req_file = control_file.parent / controls_subdir / f"{requirement_id}.yml"
+            if not req_file.exists():
+                return self._failure(req_file, f"Requirement file not found: {req_file}")
+            target = req_file
         else:
-            return self._update_inline_format(control_file, requirement_id, rules, status)
+            target = control_file
 
-    def _update_directory_format(
+        return self._update_file(target, requirement_id, rules, status, substitutions)
+
+    def _controls_dir(self, control_file: Path, substitutions: dict[str, Any]) -> str | None:
+        """Return the control file's `controls_dir`, if it keeps requirements in one."""
+        try:
+            data = load_control_yaml(control_file, substitutions)
+        except Exception as e:
+            # Fall back to the text, so an update can still go ahead; the edit
+            # check will report that the file doesn't parse.
+            logger.debug(f"Could not parse {control_file}: {e}")
+            match = _CONTROLS_DIR_PATTERN.search(control_file.read_text())
+            return match["subdir"] if match else None
+        if isinstance(data, dict) and data.get("controls_dir"):
+            return str(data["controls_dir"])
+        return None
+
+    def _update_file(
         self,
-        controls_dir: Path,
-        controls_subdir: str,
+        file_path: Path,
         requirement_id: str,
         rules: list[str],
         status: str,
+        substitutions: dict[str, Any],
     ) -> ControlUpdateResult:
-        """Update a requirement in a directory-based control file."""
-        req_file = controls_dir / controls_subdir / f"{requirement_id}.yml"
-
-        if not req_file.exists():
-            return ControlUpdateResult(
-                file_path=req_file,
-                requirements_added=0,
-                requirements_updated=0,
-                requirements_unchanged=0,
-                success=False,
-                errors=[f"Requirement file not found: {req_file}"],
-            )
-
-        content = req_file.read_text()
-        updated = self._update_requirement_in_text(content, requirement_id, rules, status)
+        """Edit one requirement in a file, after checking the edited text."""
+        content = file_path.read_text()
+        try:
+            updated = self._update_requirement_in_text(content, requirement_id, rules, status)
+        except _UpdateRefused as e:
+            return self._failure(file_path, f"{e} The file was left unchanged.")
 
         if updated is None:
-            return ControlUpdateResult(
-                file_path=req_file,
-                requirements_added=0,
-                requirements_updated=0,
-                requirements_unchanged=0,
-                success=False,
-                errors=[f"Requirement '{requirement_id}' not found in {req_file}"],
+            return self._failure(
+                file_path, f"Requirement '{requirement_id}' not found in {file_path}"
             )
 
-        req_file.write_text(updated)
-
-        return ControlUpdateResult(
-            file_path=req_file,
-            requirements_added=0,
-            requirements_updated=1,
-            requirements_unchanged=0,
-            success=True,
+        problem, warnings = self._check_edit(
+            file_path, updated, requirement_id, rules, status, substitutions
         )
+        if problem:
+            return self._failure(file_path, f"{problem} The file was left unchanged.")
 
-    def _update_inline_format(
-        self,
-        control_file: Path,
-        requirement_id: str,
-        rules: list[str],
-        status: str,
-    ) -> ControlUpdateResult:
-        """Update a requirement in an inline (monolithic) control file."""
-        content = control_file.read_text()
-        updated = self._update_requirement_in_text(content, requirement_id, rules, status)
-
-        if updated is None:
-            return ControlUpdateResult(
-                file_path=control_file,
-                requirements_added=0,
-                requirements_updated=0,
-                requirements_unchanged=0,
-                success=False,
-                errors=[f"Requirement '{requirement_id}' not found in {control_file}"],
-            )
-
-        control_file.write_text(updated)
+        file_path.write_text(updated)
 
         return ControlUpdateResult(
-            file_path=control_file,
+            file_path=file_path,
             requirements_added=0,
             requirements_updated=1,
             requirements_unchanged=0,
             success=True,
+            warnings=warnings,
         )
 
     def _update_requirement_in_text(
@@ -175,32 +206,72 @@ class ControlUpdater:
         """Find and update a requirement block in raw YAML text.
 
         Returns the updated text, or None if the requirement was not found.
+
+        Raises:
+            _UpdateRefused: If Jinja2 conditionals make the edit ambiguous
         """
         lines = content.splitlines(keepends=True)
-        req_start = self._find_requirement_start(lines, requirement_id)
-        if req_start is None:
+        if lines and not lines[-1].endswith("\n"):
+            lines[-1] += "\n"
+
+        start = self._find_requirement_start(lines, requirement_id)
+        if start is None:
             return None
 
-        # Determine the indentation of the `- id:` line
-        match = _ID_PATTERN.match(lines[req_start])
+        match = _ID_PATTERN.match(lines[start])
         if not match:
             return None
-        list_indent = match.group(1)  # spaces before `-`
-        # Properties are indented further than the `-`
-        prop_indent = list_indent + "  "
+        # The requirement's keys line up with `id`, which is after the dash and
+        # its spacing: `- id:` and `-   id:` are both common.
+        key_indent = len(match["dash_indent"]) + 1 + len(match["gap"])
 
-        # Find the end of this requirement block
-        req_end = self._find_requirement_end(lines, req_start, list_indent)
+        end = self._find_requirement_end(lines, start, key_indent, requirement_id)
+        fields = self._own_fields(lines, start, end, key_indent)
 
-        # Extract the requirement block lines
-        block_lines = lines[req_start:req_end]
+        for key in ("rules", "status"):
+            if len(fields.get(key, [])) > 1:
+                raise _UpdateRefused(
+                    f"Requirement '{requirement_id}' has more than one '{key}' key, "
+                    "probably inside Jinja2 conditionals. Edit it by hand."
+                )
 
-        # Update rules and status within the block
-        updated_block = self._update_block_fields(block_lines, rules, status, prop_indent)
+        edits: list[tuple[int, int, list[str]]] = []
+        missing: list[str] = []
+        status_line = f"{' ' * key_indent}status: {status}\n"
 
-        # Reconstruct the file
-        result_lines = lines[:req_start] + updated_block + lines[req_end:]
-        return "".join(result_lines)
+        if "rules" in fields:
+            rules_start, rules_end = fields["rules"][0]
+            value_lines = lines[rules_start + 1 : rules_end]
+            if any(_JINJA_STATEMENT.match(line) for line in value_lines):
+                raise _UpdateRefused(
+                    f"The rules of requirement '{requirement_id}' use Jinja2 conditionals, "
+                    "which replacing the list would drop. Edit it by hand."
+                )
+            item_indent = next(
+                (_indent(line) for line in value_lines if line.lstrip().startswith("- ")),
+                key_indent + 4,
+            )
+            edits.append(
+                (rules_start, rules_end, self._format_rules_block(rules, key_indent, item_indent))
+            )
+        else:
+            missing.extend(self._format_rules_block(rules, key_indent, key_indent + 4))
+
+        if "status" in fields:
+            status_start, status_end = fields["status"][0]
+            edits.append((status_start, status_end, [status_line]))
+        else:
+            missing.append(status_line)
+
+        if missing:
+            # Before nested requirements if there are any, else at the end of the block
+            insert_at = fields["controls"][0][0] if "controls" in fields else end
+            edits.append((insert_at, insert_at, missing))
+
+        for edit_start, edit_end, replacement in sorted(edits, key=lambda e: e[0], reverse=True):
+            lines[edit_start:edit_end] = replacement
+
+        return "".join(lines)
 
     def _find_requirement_start(self, lines: list[str], requirement_id: str) -> int | None:
         """Find the line index of `- id: <requirement_id>`."""
@@ -210,94 +281,160 @@ class ControlUpdater:
                 return i
         return None
 
-    def _find_requirement_end(self, lines: list[str], start: int, list_indent: str) -> int:
-        """Find the end of a requirement block (exclusive index).
+    def _find_requirement_end(
+        self, lines: list[str], start: int, key_indent: int, requirement_id: str
+    ) -> int:
+        """Return the index after the requirement's last non-blank line.
 
-        The block ends at the next list item at the same indent level,
-        or at a line with equal/lesser indentation that isn't a continuation.
+        The requirement ends before the first non-blank line indented less than
+        its keys, such as the next list item or a comment above it. Trailing blank
+        lines are left outside, so separators between requirements stay in place.
         """
-        indent_len = len(list_indent)
+        last = start
         for i in range(start + 1, len(lines)):
             line = lines[i]
-            stripped = line.rstrip("\n\r")
-
-            # Skip blank lines — they could be inside the block
-            if not stripped:
+            if _is_blank(line):
                 continue
+            if _indent(line) < key_indent:
+                if _JINJA_STATEMENT.match(line) and self._continues_after(lines, i, key_indent):
+                    raise _UpdateRefused(
+                        f"Requirement '{requirement_id}' is split by Jinja2 conditionals. "
+                        "Edit it by hand."
+                    )
+                break
+            last = i
+        return last + 1
 
-            # Count leading spaces
-            line_indent = len(stripped) - len(stripped.lstrip(" "))
+    def _continues_after(self, lines: list[str], index: int, key_indent: int) -> bool:
+        """Whether the next line that isn't blank or Jinja2 is still inside the block."""
+        for line in lines[index + 1 :]:
+            if _is_blank(line) or _JINJA_STATEMENT.match(line):
+                continue
+            return _indent(line) >= key_indent
+        return False
 
-            # A new list item at the same indent level ends the block
-            if line_indent == indent_len and stripped.lstrip().startswith("- "):
-                return i
+    def _own_fields(
+        self, lines: list[str], start: int, end: int, key_indent: int
+    ) -> dict[str, list[tuple[int, int]]]:
+        """Map each of the requirement's own keys to the line spans holding it.
 
-            # A line at lesser indentation ends the block
-            if line_indent < indent_len:
-                return i
+        A key's span covers the key line and its value: deeper-indented lines, or
+        list items at the key's own indent. Trailing blank lines are not included.
+        Keys of nested requirements and text inside block scalars are deeper than
+        `key_indent`, so they are never treated as the requirement's own.
+        """
+        fields: dict[str, list[tuple[int, int]]] = {}
+        i = start + 1
+        while i < end:
+            line = lines[i]
+            key_match = _KEY_PATTERN.match(line) if _indent(line) == key_indent else None
+            if not key_match:
+                i += 1
+                continue
+            j = i + 1
+            while j < end:
+                following = lines[j]
+                if not _is_blank(following):
+                    depth = _indent(following)
+                    is_value = depth > key_indent or (
+                        depth == key_indent and following.lstrip().startswith("- ")
+                    )
+                    if not is_value:
+                        break
+                j += 1
+            while j > i + 1 and _is_blank(lines[j - 1]):
+                j -= 1
+            fields.setdefault(key_match["key"], []).append((i, j))
+            i = j
+        return fields
 
-        return len(lines)
+    def _format_rules_block(self, rules: list[str], key_indent: int, item_indent: int) -> list[str]:
+        """Format a rules list as YAML text lines."""
+        pad = " " * key_indent
+        if not rules:
+            return [f"{pad}rules: []\n"]
+        return [f"{pad}rules:\n"] + [f"{' ' * item_indent}- {rule}\n" for rule in rules]
 
-    def _update_block_fields(
+    def _check_edit(
         self,
-        block_lines: list[str],
+        file_path: Path,
+        updated: str,
+        requirement_id: str,
         rules: list[str],
         status: str,
-        prop_indent: str,
-    ) -> list[str]:
-        """Update rules and status fields within a requirement block."""
-        result: list[str] = []
-        i = 0
-        found_rules = False
-        found_status = False
+        substitutions: dict[str, Any],
+    ) -> tuple[str | None, list[str]]:
+        """Parse the file before and after the edit, and compare.
 
-        while i < len(block_lines):
-            line = block_lines[i]
-            stripped = line.lstrip()
+        Returns a problem that should stop the write, if any, and warnings.
+        Only the requirement's `rules` and `status` may differ.
+        """
+        try:
+            before = load_control_yaml(file_path, substitutions)
+        except Exception as e:
+            return None, [
+                f"{file_path.name} did not parse before the edit ({_first_line(e)}), "
+                "so the edit could not be checked"
+            ]
 
-            # Detect `rules:` field (exact key, not rules_*)
-            if stripped.rstrip() == "rules:" or stripped.startswith("rules: "):
-                found_rules = True
-                result.extend(self._format_rules_block(rules, prop_indent))
-                i += 1
-                # Skip old rules list items (lines starting with `- ` at deeper indent)
-                rules_indent_len = len(line) - len(stripped)
-                while i < len(block_lines):
-                    next_line = block_lines[i]
-                    next_stripped = next_line.lstrip()
-                    if not next_stripped:
-                        i += 1
-                        continue
-                    next_indent = len(next_line) - len(next_stripped)
-                    if next_indent > rules_indent_len and next_stripped.startswith("- "):
-                        i += 1
-                    else:
-                        break
-                continue
+        with tempfile.TemporaryDirectory() as tmp:
+            edited_file = Path(tmp) / file_path.name
+            edited_file.write_text(updated)
+            try:
+                after = load_control_yaml(edited_file, substitutions)
+            except Exception as e:
+                return f"The edited file would not parse: {_first_line(e)}.", []
 
-            # Detect `status:` field (exact key, not status_justification etc.)
-            if stripped.rstrip() == "status:" or stripped.startswith("status: "):
-                found_status = True
-                result.append(f"{prop_indent}status: {status}\n")
-                i += 1
-                continue
+        expected = _plain(before)
+        target = (
+            _find_requirement(expected.get("controls"), requirement_id)
+            if isinstance(expected, dict)
+            else None
+        )
+        if target is None:
+            return (
+                f"Requirement '{requirement_id}' was not found when parsing {file_path.name}.",
+                [],
+            )
+        target["rules"] = list(rules)
+        target["status"] = status
 
-            result.append(line)
-            i += 1
+        if _plain(after) != expected:
+            return (
+                f"The edit would change more of {file_path.name} than the rules and status "
+                f"of requirement '{requirement_id}'.",
+                [],
+            )
+        return None, []
 
-        # Add missing fields before end of block
-        if not found_rules:
-            result.extend(self._format_rules_block(rules, prop_indent))
-        if not found_status:
-            result.append(f"{prop_indent}status: {status}\n")
+    def _substitutions(self, product: str | None) -> dict[str, Any]:
+        """Jinja2 variables for parsing control files, as ControlDiscovery uses them."""
+        if product:
+            try:
+                env = load_product_variables(
+                    get_ssg_modules().products, self.content_repo.path, product
+                )
+            except Exception as e:
+                logger.debug(f"Product variables unavailable for {product}: {e}")
+                env = None
+            if env:
+                return dict(env)
+        return {**GENERIC_SUBSTITUTIONS, "product": product or ""}
 
-        return result
+    def _invalid_status_message(self, status: str) -> str:
+        message = f"Invalid status '{status}'."
+        spaced = status.replace("_", " ").strip().lower()
+        suggestion = _RENAMED_STATUSES.get(status) or (spaced if spaced in VALID_STATUSES else None)
+        if suggestion:
+            message += f" Use '{suggestion}' instead."
+        return f"{message} Must be one of: {', '.join(CONTROL_STATUSES)}"
 
-    def _format_rules_block(self, rules: list[str], indent: str) -> list[str]:
-        """Format a rules list as YAML text lines at the given indentation."""
-        if not rules:
-            return [f"{indent}rules: []\n"]
-        lines = [f"{indent}rules:\n"]
-        for rule in rules:
-            lines.append(f"{indent}    - {rule}\n")
-        return lines
+    def _failure(self, file_path: Path, error: str) -> ControlUpdateResult:
+        return ControlUpdateResult(
+            file_path=file_path,
+            requirements_added=0,
+            requirements_updated=0,
+            requirements_unchanged=0,
+            success=False,
+            errors=[error],
+        )

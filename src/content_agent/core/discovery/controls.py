@@ -30,6 +30,24 @@ GENERIC_SUBSTITUTIONS: dict[str, Any] = {
 }
 
 
+def load_control_yaml(file_path: Path, substitutions: dict[str, Any]) -> Any:
+    """Load a control or requirement file, expanding Jinja2 with ``substitutions``.
+
+    If expansion fails or yields no mapping, the file is loaded as plain YAML,
+    which raises ``yaml.YAMLError`` when it does not parse.
+    """
+    try:
+        ssg_yaml = get_ssg_modules().yaml
+        data = ssg_yaml.open_and_expand(str(file_path), substitutions)
+        if isinstance(data, dict):
+            return data
+        logger.debug(f"Jinja2 expansion of {file_path} returned no mapping")
+    except Exception as e:
+        logger.debug(f"Jinja2 expansion failed for {file_path}: {e}")
+    with open(file_path) as f:
+        return yaml.safe_load(f)
+
+
 class ControlDiscovery:
     """Control framework discovery."""
 
@@ -707,16 +725,7 @@ class ControlDiscovery:
             **GENERIC_SUBSTITUTIONS,
             "product": product or "",
         }
-        try:
-            ssg_yaml = get_ssg_modules().yaml
-            data = ssg_yaml.open_and_expand(str(file_path), substitutions)
-            if isinstance(data, dict):
-                return data
-            logger.debug(f"Jinja2 expansion of {file_path} returned no mapping")
-        except Exception as e:
-            logger.debug(f"Jinja2 expansion failed for {file_path}: {e}")
-        with open(file_path) as f:
-            return yaml.safe_load(f)
+        return load_control_yaml(file_path, substitutions)
 
     def _parse_requirement_file(
         self, file_path: Path, product: str | None = None
