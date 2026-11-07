@@ -19,6 +19,16 @@ Dump resource models in JSON mode before encoding them. Session tests
 read all 12 resource routes, parse the timestamps and preserve Unicode
 text. Shared fixtures provide a temporary product, rule and build.
 
+### Resource content MIME type
+
+Resource descriptors advertised application/json, but reads returned
+plain strings. The SDK wrapped those strings as text/plain, so the
+content metadata disagreed with the resource listing.
+
+Wrap resource text in ReadResourceContents with application/json. The
+session tests now check the URI, MIME type and JSON content of all
+12 resource routes.
+
 ## Verification
 
 Each implemented fix has a regression test through an MCP session.

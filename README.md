@@ -45,6 +45,7 @@ Other changes:
   collections and product details through MCP.
 - Resource model dumps now serialize timestamps as JSON values. Session tests
   read every resource route, including rules and built datastreams.
+- Resource reads now return application/json, matching their descriptors.
   The [protocol design record](openspec/changes/archive/2026-11-07-test-mcp-protocol/design.md) describes these fixes.
 - AI requests work with anthropic SDK 2.x, and the default model is `claude-sonnet-5-5`, replacing the retired `claude-3-5-sonnet-20241022`.
 - The profile index is shared between tool calls, so `get_rule_product_availability` takes about 0.1 seconds after the first call instead of about 15.

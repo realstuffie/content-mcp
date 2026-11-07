@@ -19,3 +19,13 @@ modification and build timestamps SHALL be ISO 8601 strings.
 
 - **WHEN** a client reads rule details and datastream metadata with known timestamps
 - **THEN** both responses contain JSON whose timestamps parse as ISO 8601 values
+
+### Requirement: Resource content MIME type
+
+The server SHALL return JSON resource contents with application/json
+and preserve the requested resource URI in the response.
+
+#### Scenario: Resource content MIME type
+
+- **WHEN** a client reads any supported resource route
+- **THEN** the response preserves its URI and declares application/json

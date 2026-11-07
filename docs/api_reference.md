@@ -8,6 +8,8 @@ The server accepts the SDK's URI objects when a client calls resources/read.
 
 Resource timestamps use ISO 8601 strings in JSON responses.
 
+Resource reads declare application/json and preserve the requested URI.
+
 ### Products
 
 **List all products**

@@ -103,6 +103,7 @@ async def test_resource_content_is_json(mcp_session, uri):
         assert len(result.contents) == 1
         content = result.contents[0]
         assert str(content.uri) == uri
+        assert content.mimeType == "application/json"
         data = json.loads(content.text)
         assert data
         if uri == f"cac://rules/{RULE}":
