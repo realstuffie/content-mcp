@@ -17,7 +17,12 @@ from typing import Any
 
 import yaml
 
-from content_agent.core.discovery.rule_paths import product_rule_ids, rule_files
+from content_agent.core.discovery.content_state import ContentState, take_content_state
+from content_agent.core.discovery.rule_paths import (
+    configured_rule_roots,
+    product_rule_ids,
+    rule_files,
+)
 from content_agent.core.integration import get_content_repository
 from content_agent.core.integration.product_variables import load_product_variables
 from content_agent.core.integration.ssg_modules import get_ssg_modules
@@ -44,23 +49,34 @@ HiddenProfileRules = dict[str, set[str]]
 
 # Every MCP tool call creates a new RuleDiscovery, and building the profile index
 # reads every profile and control file, so the index is shared between instances.
-# It is rebuilt when a profile or control file is added, removed or modified.
-_shared_profile_indexes: dict[
-    str, tuple[tuple[int, float], ProfileRuleIndex, HiddenProfileRules]
-] = {}
+# It is rebuilt when any file it is built from changes.
+_shared_profile_indexes: dict[str, tuple[ContentState, ProfileRuleIndex, HiddenProfileRules]] = {}
+
+# The files the profile index is built from, besides the rule.yml files: products
+# and their variables, profiles, and control files
+PROFILE_INDEX_PATTERNS = (
+    "products/*/product.yml",
+    "product_properties/*.yml",
+    "products/*/profiles/*.profile",
+    "controls/**/*.yml",
+    "products/*/controls/**/*.yml",
+)
 
 
-def _profile_inputs_signature(repo_path: Path) -> tuple[int, float] | None:
-    """Return (file count, newest mtime) of the files the profile index is built from."""
+def _profile_index_state(repo_path: Path) -> ContentState | None:
+    """Return the state of the files the profile index is built from.
+
+    Besides profiles and control files, the index depends on each rule.yml
+    (documentation_complete, and the attributes filter_rules tests), and on
+    product.yml and product_properties, which set the rule directories and the
+    Jinja2 variables rules are expanded with.
+    """
     try:
-        files = [
-            *repo_path.glob("products/*/profiles/*.profile"),
-            *repo_path.glob("controls/**/*.yml"),
-            *repo_path.glob("products/*/controls/**/*.yml"),
-        ]
-        return len(files), max((f.stat().st_mtime for f in files), default=0.0)
+        return take_content_state(
+            repo_path, PROFILE_INDEX_PATTERNS, configured_rule_roots(repo_path)
+        )
     except Exception as e:
-        logger.debug(f"Could not compute the profile index signature: {e}")
+        logger.debug(f"Could not record the profile index inputs: {e}")
         return None
 
 
@@ -439,17 +455,21 @@ class RuleDiscovery:
         """Return the profile index, reusing the shared one when its inputs are unchanged."""
         if self._profile_rule_index is None:
             repo_key = str(self.content_repo.path)
-            signature = _profile_inputs_signature(self.content_repo.path)
             shared = _shared_profile_indexes.get(repo_key)
-            if signature is not None and shared is not None and shared[0] == signature:
+            if shared is not None and shared[0].is_current():
                 self._profile_rule_index = shared[1]
                 self._hidden_profile_rules = shared[2]
             else:
+                # Taken before the build, so a file that changes during it is
+                # noticed on the next call
+                state = _profile_index_state(self.content_repo.path)
                 self._build_profile_rule_index()
                 assert self._profile_rule_index is not None  # for mypy
-                if signature is not None:
+                if state is None:
+                    _shared_profile_indexes.pop(repo_key, None)
+                else:
                     _shared_profile_indexes[repo_key] = (
-                        signature,
+                        state,
                         self._profile_rule_index,
                         self._hidden_profile_rules,
                     )

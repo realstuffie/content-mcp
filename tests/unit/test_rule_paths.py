@@ -65,6 +65,32 @@ def test_defaults_without_benchmark_roots(tmp_path):
     assert rule_directories(tmp_path) == [tmp_path / "applications", tmp_path / "linux_os"]
 
 
+def test_configured_roots_include_missing_and_additional_directories(tmp_path):
+    from content_agent.core.discovery.rule_paths import configured_rule_roots
+
+    (tmp_path / "linux_os" / "guide").mkdir(parents=True)
+    _product(tmp_path, "rhel9", "../../linux_os/guide")
+    (tmp_path / "products" / "rhel9" / "product.yml").write_text(
+        'product: rhel9\nbenchmark_root: "../../linux_os/guide"\n'
+        "additional_content_directories:\n  - shared/extra\n"
+    )
+    _product(tmp_path, "planned", "../../not_yet")
+
+    assert configured_rule_roots(tmp_path) == [
+        tmp_path / "linux_os" / "guide",
+        tmp_path / "not_yet",
+        tmp_path / "shared" / "extra",
+    ]
+
+
+def test_configured_roots_default_without_benchmark_roots(tmp_path):
+    from content_agent.core.discovery.rule_paths import configured_rule_roots
+
+    _product(tmp_path, "rhel9", None)
+
+    assert configured_rule_roots(tmp_path) == [tmp_path / "applications", tmp_path / "linux_os"]
+
+
 def test_rule_discovery_finds_product_rules(tmp_path):
     import content_agent.core.discovery.rules as rules_module
 

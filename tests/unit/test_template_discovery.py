@@ -389,3 +389,27 @@ class TestTemplateParameters:
 
         assert first is not None and first.used_by_rules == 1
         assert second is not None and second.used_by_rules == 2
+
+    def test_rule_edits_refresh_the_cache(self, initialized_content_repo):
+        repo_path = initialized_content_repo.path
+        _setup_templates(repo_path, templates=["package_installed"])
+        _write_rule(
+            repo_path,
+            "package_tmux_installed",
+            "template:\n    name: package_installed\n    vars:\n        pkgname: tmux\n",
+        )
+        discovery = TemplateDiscovery()
+        first = discovery.get_template_schema("package_installed")
+        _write_rule(
+            repo_path,
+            "package_tmux_installed",
+            "template:\n    name: package_installed\n    vars:\n        pkgname: tmux\n"
+            "        evr: 0:3.2a-4\n",
+        )
+
+        second = discovery.get_template_schema("package_installed")
+
+        assert first is not None and second is not None
+        evr_uses = {p.name: p.used_by_rules for p in second.parameters}["evr"]
+        assert {p.name: p.used_by_rules for p in first.parameters}["evr"] == 0
+        assert evr_uses == 1

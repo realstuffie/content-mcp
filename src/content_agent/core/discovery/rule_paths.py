@@ -85,6 +85,46 @@ def product_rule_directories(repo_path: Path, product: str) -> list[Path] | None
     return [directory for directory in directories if directory.is_dir()]
 
 
+def configured_rule_roots(repo_path: Path) -> list[Path]:
+    """Return every rule directory product.yml files name, whether it exists or not.
+
+    These are the benchmark roots and additional_content_directories of all
+    products, inside the repository, without roots nested in other roots. This
+    is what a cache of rule data has to watch: a named directory that doesn't
+    exist yet may be created later. Without any named root, it is the default
+    directories, as in rule_directories().
+    """
+    repo = Path(os.path.normpath(repo_path))
+    roots: set[Path] = set()
+    for product_yml in sorted((repo / "products").glob("*/product.yml")):
+        try:
+            data = yaml.safe_load(product_yml.read_text())
+        except (OSError, yaml.YAMLError) as e:
+            logger.debug(f"Could not read {product_yml}: {e}")
+            continue
+        if not isinstance(data, dict):
+            continue
+        named = []
+        if data.get("benchmark_root"):
+            named.append(product_yml.parent / str(data["benchmark_root"]))
+        named.extend(
+            repo / str(extra) for extra in data.get("additional_content_directories") or []
+        )
+        for path in named:
+            root = Path(os.path.normpath(path))
+            if root.is_relative_to(repo):
+                roots.add(root)
+
+    if not roots:
+        roots = {repo / name for name in DEFAULT_RULE_DIRS}
+
+    kept: list[Path] = []
+    for root in sorted(roots, key=lambda path: len(path.parts)):
+        if not any(root.is_relative_to(parent) for parent in kept):
+            kept.append(root)
+    return sorted(kept)
+
+
 def product_rule_ids(
     repo_path: Path, product: str, directory_cache: dict[Path, set[str]] | None = None
 ) -> set[str] | None:

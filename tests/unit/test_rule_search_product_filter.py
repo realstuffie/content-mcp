@@ -75,3 +75,65 @@ def test_profile_index_is_shared_and_rebuilt_when_profiles_change(tmp_path):
         assert len(builds) == 2
 
     rules_module._shared_profile_indexes.clear()
+
+
+def _platform_index(builds):
+    """Stand in for the index build: cis keeps the rules without the ocp4-node platform."""
+
+    def build(self):
+        builds.append(1)
+        self._profile_rule_index = {}
+        for rule_yml in sorted((self.content_repo.path / "linux_os").rglob("rule.yml")):
+            if yaml.safe_load(rule_yml.read_text()).get("platform") != "ocp4-node":
+                self._profile_rule_index[rule_yml.parent.name] = [("ubuntu2204", "cis")]
+
+    return build
+
+
+def test_profile_index_is_rebuilt_when_a_rule_changes(tmp_path):
+    # The profiles stay the same, but filter_rules would now exclude the rule
+    repo = _repo(tmp_path)
+    rules_module._shared_profile_indexes.clear()
+    builds: list[int] = []
+
+    with patch.object(
+        rules_module.RuleDiscovery, "_build_profile_rule_index", _platform_index(builds)
+    ):
+        assert "rule_other" in _discovery(repo)._ensure_profile_rule_index()
+
+        rule_yml = repo / "linux_os" / "guide" / "rule_other" / "rule.yml"
+        data = yaml.safe_load(rule_yml.read_text())
+        rule_yml.write_text(yaml.dump({**data, "platform": "ocp4-node"}))
+
+        assert "rule_other" not in _discovery(repo)._ensure_profile_rule_index()
+        assert len(builds) == 2
+
+    rules_module._shared_profile_indexes.clear()
+
+
+def test_profile_index_is_rebuilt_when_product_files_change(tmp_path):
+    repo = _repo(tmp_path)
+    product_yml = repo / "products" / "ubuntu2204" / "product.yml"
+    product_yml.write_text("product: ubuntu2204\n")
+    properties = repo / "product_properties"
+    properties.mkdir()
+    (properties / "10-ids.yml").write_text("auid: 1000\n")
+    rules_module._shared_profile_indexes.clear()
+    builds: list[int] = []
+
+    with patch.object(
+        rules_module.RuleDiscovery, "_build_profile_rule_index", _platform_index(builds)
+    ):
+        _discovery(repo)._ensure_profile_rule_index()
+        _discovery(repo)._ensure_profile_rule_index()
+        assert len(builds) == 1
+
+        product_yml.write_text("product: ubuntu2204\nfull_name: Ubuntu 22.04\n")
+        _discovery(repo)._ensure_profile_rule_index()
+        assert len(builds) == 2
+
+        (properties / "10-ids.yml").write_text("auid: 500\nuid_min: 500\n")
+        _discovery(repo)._ensure_profile_rule_index()
+        assert len(builds) == 3
+
+    rules_module._shared_profile_indexes.clear()

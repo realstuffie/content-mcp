@@ -12,7 +12,7 @@ The system SHALL read the `vars` of the `template` block of every `rule.yml` und
 
 For each parameter, `used_by_rules` SHALL give the number of rules that set it, and `type` the YAML types of the values rules use, or `unknown` when no rule sets it. Parameters that rules set but the reference does not list SHALL be included after the documented ones, with a description saying so. `used_by_rules` on the schema SHALL give the number of rules that use the template.
 
-The rule scan SHALL be cached per content repository and refreshed when a rule file is added, removed or modified.
+The rule scan SHALL be cached per content repository and refreshed when a rule file is added, removed or modified, or a `product.yml` changes. Rule files SHALL be compared individually by modification time, status change time and size, and the rule directories SHALL be listed again on each check.
 
 #### Scenario: Parameter the reference leaves out
 - **WHEN** rules using `sshd_lineinfile` set `xccdf_variable` and the reference does not list it

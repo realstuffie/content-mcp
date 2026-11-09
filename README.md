@@ -54,7 +54,7 @@ Other changes:
   resource errors distinguish missing content from invalid URIs and parse
   failures. The [protocol test design record](openspec/changes/archive/2026-11-07-test-mcp-protocol/design.md) describes the fixes and test scope.
 - AI requests work with anthropic SDK 2.x, and the default model is `claude-sonnet-5-5`, replacing the retired `claude-3-5-sonnet-20241022`.
-- The profile index is shared between tool calls, so `get_rule_product_availability` takes about 0.1 seconds after the first call instead of about 15.
+- The profile index is shared between tool calls, so `get_rule_product_availability` takes about 0.1 seconds after the first call instead of about 15. The server rebuilds it when a file it was built from changes: a rule, profile or control file, a `product.yml`, or a `product_properties` file. It compares each file's mtime, ctime and size, and lists the rule directories again to find new or removed rules. The check takes about 20 ms. The rules `get_template_schema` reads are checked the same way.
 - The product list is shared between tool calls too, so control tools that take a product, like `get_requirement_file_path`, answer in about 1 ms instead of 55 to 65.
 - `jinja2` is a declared dependency, because ComplianceAsCode's `ssg` modules import it.
 - Deprecated dependencies and APIs are replaced: `pypdf` replaces the deprecated `PyPDF2`, the models use Pydantic 2's `ConfigDict`, and timestamps no longer use `datetime.utcnow()`. The only warnings left in the test run come from Jinja2 escapes in ComplianceAsCode's own macros.
