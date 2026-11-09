@@ -101,6 +101,7 @@ async def test_capabilities_and_discovery(mcp_session):
         names = [tool.name for tool in listing.tools]
         assert len(names) == len(set(names))
         assert {"list_products", "validate_rule_yaml", "get_control_stats"} <= set(names)
+        assert {"generate_rule_boilerplate", "generate_rule_from_template"}.isdisjoint(names)
         for tool in listing.tools:
             assert tool.description
             Draft202012Validator.check_schema(tool.inputSchema)

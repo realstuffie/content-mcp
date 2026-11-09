@@ -221,20 +221,18 @@ Discovery classes instantiate and return appropriate model objects:
 6. Claude Desktop receives resource content
 ```
 
-### Rule Generation Flow
+### Rule Validation Flow
 
 ```
-1. generate_rule_boilerplate tool called
+1. Agent or contributor drafts rule YAML
    ↓
-2. RuleGenerator determines directory location
+2. validate_rule_yaml tool called
    ↓
-3. Directory structure created
+3. RuleValidator parses the YAML, expanding Jinja2 when needed
    ↓
-4. rule.yml generated from template
+4. Rule fields and optional references checked
    ↓
-5. Validation performed
-   ↓
-6. ScaffoldingResult returned with file paths
+5. ValidationResult returned with errors, warnings and any applied fixes
 ```
 
 ## Async Design

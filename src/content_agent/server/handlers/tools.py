@@ -158,46 +158,7 @@ TOOLS = [
             "required": ["profile_id", "product"],
         },
     },
-    # Scaffolding tools
-    {
-        "name": "generate_rule_boilerplate",
-        "description": "Generate basic rule structure with boilerplate files",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "rule_id": {
-                    "type": "string",
-                    "description": "Rule identifier (will be used as directory name)",
-                },
-                "title": {
-                    "type": "string",
-                    "description": "Rule title",
-                },
-                "description": {
-                    "type": "string",
-                    "description": "Rule description",
-                },
-                "severity": {
-                    "type": "string",
-                    "description": "Rule severity",
-                    "enum": ["low", "medium", "high", "unknown"],
-                },
-                "product": {
-                    "type": "string",
-                    "description": "Primary product for this rule",
-                },
-                "location": {
-                    "type": "string",
-                    "description": "Optional custom location path (e.g., linux_os/guide/services/ssh)",
-                },
-                "rationale": {
-                    "type": "string",
-                    "description": "Optional rationale for the rule",
-                },
-            },
-            "required": ["rule_id", "title", "description", "severity", "product"],
-        },
-    },
+    # Rule validation
     {
         "name": "validate_rule_yaml",
         "description": "Validate rule.yml YAML content",
@@ -220,32 +181,6 @@ TOOLS = [
                 },
             },
             "required": ["rule_yaml"],
-        },
-    },
-    {
-        "name": "generate_rule_from_template",
-        "description": "Generate rule using a template (Phase 3 feature)",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "template_name": {
-                    "type": "string",
-                    "description": "Template name",
-                },
-                "parameters": {
-                    "type": "object",
-                    "description": "Template parameters",
-                },
-                "rule_id": {
-                    "type": "string",
-                    "description": "Rule identifier",
-                },
-                "product": {
-                    "type": "string",
-                    "description": "Product identifier",
-                },
-            },
-            "required": ["template_name", "parameters", "rule_id", "product"],
         },
     },
     # Build artifacts tools

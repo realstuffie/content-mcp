@@ -240,39 +240,12 @@ Get detailed information about a profile.
 
 **Returns:** ProfileDetails object
 
-### Scaffolding Tools
+### Rule Validation
 
-#### generate_rule_boilerplate
-
-Generate basic rule structure with boilerplate files.
-
-**Parameters:**
-- `rule_id` (string, required): Rule identifier (directory name)
-- `title` (string, required): Rule title
-- `description` (string, required): Rule description
-- `severity` (string, required): Rule severity (low, medium, high, unknown)
-- `product` (string, required): Primary product
-- `location` (string, optional): Custom location path
-- `rationale` (string, optional): Rule rationale
-
-**Returns:** ScaffoldingResult object
-
-**Example:**
-```json
-{
-  "success": true,
-  "rule_id": "sshd_max_auth_tries",
-  "rule_dir": "linux_os/guide/services/ssh/ssh_server/sshd_max_auth_tries",
-  "files_created": [
-    "linux_os/.../rule.yml",
-    "linux_os/.../bash/",
-    "linux_os/.../ansible/",
-    "linux_os/.../oval/",
-    "linux_os/.../tests/"
-  ],
-  "message": "Rule boilerplate created successfully"
-}
-```
+Agents with file access can draft rules directly and submit their YAML for
+validation. `generate_rule_boilerplate` and `generate_rule_from_template` are
+not advertised in the MCP tool list; their internal code and handlers remain
+unmaintained.
 
 #### validate_rule_yaml
 
@@ -301,18 +274,6 @@ Validate rule.yml YAML content.
   "fixes_applied": []
 }
 ```
-
-#### generate_rule_from_template
-
-Generate rule using a template (Phase 3 feature - not yet implemented).
-
-**Parameters:**
-- `template_name` (string, required): Template name
-- `parameters` (object, required): Template parameters
-- `rule_id` (string, required): Rule identifier
-- `product` (string, required): Product identifier
-
-**Returns:** ScaffoldingResult object
 
 ### Build Artifact Tools
 
@@ -932,22 +893,12 @@ get_rule_details({
 })
 ```
 
-### Example 2: Create New Rule
+### Example 2: Validate a Rule Draft
 
 ```javascript
-// Generate rule boilerplate
-generate_rule_boilerplate({
-  rule_id: "sshd_max_auth_tries",
-  title: "Set SSH MaxAuthTries",
-  description: "Configure maximum authentication attempts",
-  severity: "medium",
-  product: "rhel9",
-  rationale: "Limit brute force attack attempts"
-})
-
-// Validate the generated rule
+// Validate YAML drafted by an agent or contributor
 validate_rule_yaml({
-  rule_yaml: "...",
+  rule_yaml: "title: Set SSH MaxAuthTries\ndescription: Configure maximum authentication attempts\nseverity: medium\n",
   check_references: true
 })
 ```

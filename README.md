@@ -72,15 +72,15 @@ Known gaps:
 - The server still needs porting to MCP SDK 2.x.
 - `update_requirement_rules` refuses requirements whose rules use Jinja2 conditionals, such as two in `srg_gpos`. Those need a manual edit.
 
-Not maintained, on purpose:
+Rule authoring:
 
-- The rule writing tools. An agent with file access can write a `rule.yml` itself, so this fork concentrates on reading content and validating it. `generate_rule_boilerplate` writes rules the content build rejects, with a top-level `products:` key and a placeholder CCE, and two of its default locations don't exist. `generate_rule_from_template` isn't implemented.
+- Agents with file access can draft `rule.yml` files directly and check them with `validate_rule_yaml`. The MCP tool list omits `generate_rule_boilerplate`, whose output the content build rejects, and the unimplemented `generate_rule_from_template`. Their internal code and handlers remain, but this fork does not maintain them.
 
 ## Features
 
 - **Content Discovery**: Search and explore rules, profiles, products, and templates
 - **Build Artifacts**: Access rendered content from build directories (post-Jinja processing)
-- **Rule Scaffolding**: Generate rule boilerplate with validation
+- **Rule Validation**: Validate rule.yml drafts
 - **Control File Generation**: Create control files from security policy documents
   - Parse PDF, Markdown, HTML, and text policy documents
   - Extract requirements with exact text preservation
@@ -307,10 +307,8 @@ For full parameter details and response schemas, see the [API Reference](docs/ap
 - `get_datastream_info` - Get datastream information and statistics
 - `search_rendered_content` - Search in rendered build artifacts
 
-### Scaffolding
+### Rule Validation
 
-- `generate_rule_boilerplate` - Generate basic rule structure
-- `generate_rule_from_template` - Generate rule using template
 - `validate_rule_yaml` - Validate rule.yml structure
 
 ### Control Files
@@ -343,14 +341,12 @@ Claude: [calls get_rule_details(rule_id="sshd_set_idle_timeout")]
 Claude: "This rule checks ClientAliveInterval. I can see the source and rendered content for rhel9 and rhel10. The rendered RHEL 9 version shows ClientAliveInterval 300 (5 minutes)..."
 ```
 
-### Create a New Rule
+### Validate a Rule Draft
 
 ```
-User: "Create a new rule for SSH MaxAuthTries"
-Claude: [calls generate_rule_boilerplate(...)]
-Claude: "Created rule structure at linux_os/guide/services/ssh/..."
+User: "Validate my rule draft for SSH MaxAuthTries"
 Claude: [calls validate_rule_yaml(...)]
-Claude: "Rule validates successfully!"
+Claude: "The draft passed the rule YAML validator."
 ```
 
 ### Create Control Files from Policy Document
