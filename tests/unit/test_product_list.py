@@ -1,17 +1,15 @@
-"""Tests for reusing the product list between tool calls."""
-
-import os
+"""Tests for listing products and checking product names."""
 
 from content_agent.core.discovery.controls import controls_dir_setting
-from content_agent.core.discovery.products import ProductDiscovery
+from content_agent.core.discovery.products import ProductDiscovery, product_ids
 
 
 def _ids(result):
     return [p.product_id for p in result.items]
 
 
-class TestProductListCache:
-    def test_new_product_refreshes_the_list(self, initialized_content_repo):
+class TestProductListIsCurrent:
+    def test_new_product_is_listed(self, initialized_content_repo):
         repo = initialized_content_repo.path
         first = ProductDiscovery().list_products()
         (repo / "products" / "ubuntu2204").mkdir()
@@ -24,24 +22,23 @@ class TestProductListCache:
         assert _ids(first) == ["rhel9"]
         assert _ids(second) == ["rhel9", "ubuntu2204"]
 
-    def test_changed_product_refreshes_the_list(self, initialized_content_repo):
+    def test_changed_product_is_read_again(self, initialized_content_repo):
         product_yml = initialized_content_repo.path / "products" / "rhel9" / "product.yml"
         ProductDiscovery().list_products()
         product_yml.write_text("product: rhel9\nfull_name: Renamed\n")
-        stat = product_yml.stat()
-        os.utime(product_yml, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
 
         result = ProductDiscovery().list_products()
 
         assert result.items[0].name == "Renamed"
 
-    def test_callers_get_their_own_copy(self, initialized_content_repo):
-        first = ProductDiscovery().list_products()
-        first.items.clear()
+    def test_product_ids_from_directories(self, tmp_path):
+        for name in ("rhel9", "ubuntu2204"):
+            (tmp_path / "products" / name).mkdir(parents=True)
+            (tmp_path / "products" / name / "product.yml").write_text(f"product: {name}\n")
+        (tmp_path / "products" / "no_product_file").mkdir()
 
-        second = ProductDiscovery().list_products()
-
-        assert _ids(second) == ["rhel9"]
+        assert product_ids(tmp_path) == ["rhel9", "ubuntu2204"]
+        assert product_ids(tmp_path / "missing") == []
 
 
 class TestControlsDirSetting:

@@ -48,17 +48,9 @@ def _write_control_yaml(path: Path, control_id: str, title: str, controls: list 
     path.write_text(yaml.dump(data))
 
 
-def _mock_product_discovery(known_products: list[str]):
-    """Create a mock ProductDiscovery that returns given product IDs."""
-    from content_agent.models.common import DiscoveryResult
-
-    mock_cls = MagicMock()
-    mock_instance = MagicMock()
-    mock_instance.list_products.return_value = DiscoveryResult(
-        items=[MagicMock(product_id=pid) for pid in known_products]
-    )
-    mock_cls.return_value = mock_instance
-    return mock_cls
+def _mock_product_ids(known_products: list[str]):
+    """Stand in for product_ids(), which lists the products directory."""
+    return MagicMock(return_value=sorted(known_products))
 
 
 class TestGetControlsDirs:
@@ -72,8 +64,8 @@ class TestGetControlsDirs:
         from content_agent.core.discovery.controls import ControlDiscovery
 
         with patch(
-            "content_agent.core.discovery.products.ProductDiscovery",
-            _mock_product_discovery([]),
+            "content_agent.core.discovery.controls.product_ids",
+            _mock_product_ids([]),
         ):
             discovery = ControlDiscovery()
             dirs = discovery._get_controls_dirs(product=None)
@@ -89,8 +81,8 @@ class TestGetControlsDirs:
         from content_agent.core.discovery.controls import ControlDiscovery
 
         with patch(
-            "content_agent.core.discovery.products.ProductDiscovery",
-            _mock_product_discovery(["rhel9"]),
+            "content_agent.core.discovery.controls.product_ids",
+            _mock_product_ids(["rhel9"]),
         ):
             discovery = ControlDiscovery()
             dirs = discovery._get_controls_dirs(product="rhel9")
@@ -110,8 +102,8 @@ class TestGetControlsDirs:
         from content_agent.core.discovery.controls import ControlDiscovery
 
         with patch(
-            "content_agent.core.discovery.products.ProductDiscovery",
-            _mock_product_discovery(["fedora"]),
+            "content_agent.core.discovery.controls.product_ids",
+            _mock_product_ids(["fedora"]),
         ):
             discovery = ControlDiscovery()
             dirs = discovery._get_controls_dirs(product="fedora")
@@ -126,8 +118,8 @@ class TestGetControlsDirs:
         from content_agent.core.discovery.controls import ControlDiscovery
 
         with patch(
-            "content_agent.core.discovery.products.ProductDiscovery",
-            _mock_product_discovery(["rhel9"]),
+            "content_agent.core.discovery.controls.product_ids",
+            _mock_product_ids(["rhel9"]),
         ):
             discovery = ControlDiscovery()
             with pytest.raises(ValueError, match="Unknown product 'nonexistent'"):
@@ -143,8 +135,8 @@ class TestGetControlsDirs:
         from content_agent.core.discovery.controls import ControlDiscovery
 
         with patch(
-            "content_agent.core.discovery.products.ProductDiscovery",
-            _mock_product_discovery(["rhel8", "rhel9"]),
+            "content_agent.core.discovery.controls.product_ids",
+            _mock_product_ids(["rhel8", "rhel9"]),
         ):
             discovery = ControlDiscovery()
             dirs = discovery._get_controls_dirs(product=None)
@@ -179,8 +171,8 @@ class TestListControlsOverride:
         from content_agent.core.discovery.controls import ControlDiscovery
 
         with patch(
-            "content_agent.core.discovery.products.ProductDiscovery",
-            _mock_product_discovery(["rhel9"]),
+            "content_agent.core.discovery.controls.product_ids",
+            _mock_product_ids(["rhel9"]),
         ):
             discovery = ControlDiscovery()
             controls = discovery.list_controls(product="rhel9")
@@ -202,8 +194,8 @@ class TestListControlsOverride:
         from content_agent.core.discovery.controls import ControlDiscovery
 
         with patch(
-            "content_agent.core.discovery.products.ProductDiscovery",
-            _mock_product_discovery(["rhel9"]),
+            "content_agent.core.discovery.controls.product_ids",
+            _mock_product_ids(["rhel9"]),
         ):
             discovery = ControlDiscovery()
             details = discovery.get_control_details("cis_rhel9", product="rhel9")
@@ -223,8 +215,8 @@ class TestGetControlDetailsSourceDir:
         from content_agent.core.discovery.controls import ControlDiscovery
 
         with patch(
-            "content_agent.core.discovery.products.ProductDiscovery",
-            _mock_product_discovery([]),
+            "content_agent.core.discovery.controls.product_ids",
+            _mock_product_ids([]),
         ):
             discovery = ControlDiscovery()
             details = discovery.get_control_details("anssi")
@@ -245,8 +237,8 @@ class TestGetControlDetailsSourceDir:
         from content_agent.core.discovery.controls import ControlDiscovery
 
         with patch(
-            "content_agent.core.discovery.products.ProductDiscovery",
-            _mock_product_discovery(["rhel9"]),
+            "content_agent.core.discovery.controls.product_ids",
+            _mock_product_ids(["rhel9"]),
         ):
             discovery = ControlDiscovery()
             details = discovery.get_control_details("cis_rhel9", product="rhel9")
@@ -275,8 +267,8 @@ class TestRequirementFilePathProduct:
         from content_agent.core.discovery.controls import ControlDiscovery
 
         with patch(
-            "content_agent.core.discovery.products.ProductDiscovery",
-            _mock_product_discovery(["rhel9"]),
+            "content_agent.core.discovery.controls.product_ids",
+            _mock_product_ids(["rhel9"]),
         ):
             discovery = ControlDiscovery()
             result = discovery.get_requirement_file_path("custom", "C1", product="rhel9")
@@ -306,8 +298,8 @@ class TestRequirementFilePathProduct:
         from content_agent.core.discovery.controls import ControlDiscovery
 
         with patch(
-            "content_agent.core.discovery.products.ProductDiscovery",
-            _mock_product_discovery(["rhel9"]),
+            "content_agent.core.discovery.controls.product_ids",
+            _mock_product_ids(["rhel9"]),
         ):
             discovery = ControlDiscovery()
             result = discovery.get_requirement_file_path("cis", "1.1.1", product="rhel9")
@@ -345,8 +337,8 @@ class TestUpdateRequirementRulesProduct:
         from content_agent.core.scaffolding.control_updater import ControlUpdater
 
         with patch(
-            "content_agent.core.discovery.products.ProductDiscovery",
-            _mock_product_discovery(["rhel9"]),
+            "content_agent.core.discovery.controls.product_ids",
+            _mock_product_ids(["rhel9"]),
         ):
             updater = ControlUpdater()
             result = updater.update_requirement_rules(
@@ -480,8 +472,8 @@ class TestPoliciesWithoutAProduct:
 
         assert discovery.get_control_details("shared").title == "Global"
         with patch(
-            "content_agent.core.discovery.products.ProductDiscovery",
-            _mock_product_discovery(["rhel8", "rhel9"]),
+            "content_agent.core.discovery.controls.product_ids",
+            _mock_product_ids(["rhel8", "rhel9"]),
         ):
             assert discovery.get_control_details("shared", product="rhel9").title == "RHEL 9"
 
@@ -506,8 +498,8 @@ class TestPoliciesWithoutAProduct:
         discovery = self._discovery(self._repo(tmp_path))
 
         with patch(
-            "content_agent.core.discovery.products.ProductDiscovery",
-            _mock_product_discovery(["rhel8", "rhel9"]),
+            "content_agent.core.discovery.controls.product_ids",
+            _mock_product_ids(["rhel8", "rhel9"]),
         ):
             index = discovery.get_control_rule_index(control_ids=["nist", "shared"])
 
@@ -522,8 +514,8 @@ class TestPoliciesWithoutAProduct:
         discovery = self._discovery(self._repo(tmp_path))
 
         with patch(
-            "content_agent.core.discovery.products.ProductDiscovery",
-            _mock_product_discovery(["rhel8", "rhel9"]),
+            "content_agent.core.discovery.controls.product_ids",
+            _mock_product_ids(["rhel8", "rhel9"]),
         ):
             similar = discovery.find_similar_requirements("account management", min_similarity=0.5)
 
@@ -536,8 +528,8 @@ class TestPoliciesWithoutAProduct:
         discovery = self._discovery(self._repo(tmp_path))
 
         with patch(
-            "content_agent.core.discovery.products.ProductDiscovery",
-            _mock_product_discovery(["rhel8", "rhel9"]),
+            "content_agent.core.discovery.controls.product_ids",
+            _mock_product_ids(["rhel8", "rhel9"]),
         ):
             found = discovery.search_controls("account management")
             found_for_rhel8 = discovery.search_controls("account management", product="rhel8")

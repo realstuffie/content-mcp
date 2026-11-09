@@ -18,6 +18,7 @@ from typing import Any
 import yaml
 
 from content_agent.core.discovery.content_state import ContentState, take_content_state
+from content_agent.core.discovery.jinja_expansion import expand_yaml
 from content_agent.core.discovery.rule_paths import (
     configured_rule_roots,
     product_rule_ids,
@@ -53,10 +54,11 @@ HiddenProfileRules = dict[str, set[str]]
 _shared_profile_indexes: dict[str, tuple[ContentState, ProfileRuleIndex, HiddenProfileRules]] = {}
 
 # The files the profile index is built from, besides the rule.yml files: products
-# and their variables, profiles, and control files
+# and their variables, Jinja2 macros, profiles, and control files
 PROFILE_INDEX_PATTERNS = (
     "products/*/product.yml",
     "product_properties/*.yml",
+    "shared/macros/*.jinja",
     "products/*/profiles/*.profile",
     "controls/**/*.yml",
     "products/*/controls/**/*.yml",
@@ -67,9 +69,9 @@ def _profile_index_state(repo_path: Path) -> ContentState | None:
     """Return the state of the files the profile index is built from.
 
     Besides profiles and control files, the index depends on each rule.yml
-    (documentation_complete, and the attributes filter_rules tests), and on
+    (documentation_complete, and the attributes filter_rules tests), on
     product.yml and product_properties, which set the rule directories and the
-    Jinja2 variables rules are expanded with.
+    Jinja2 variables, and on the Jinja2 macros rules and control files use.
     """
     try:
         return take_content_state(
@@ -121,8 +123,8 @@ class RuleDiscovery:
     def _load_rule_yaml(self, rule_path: Path, product: str | None = None) -> dict:
         """Load and parse a rule.yml file, expanding Jinja2 templates.
 
-        Uses ssg.yaml.open_and_expand() to handle Jinja2 control structures
-        that would otherwise break standard YAML parsing.
+        Uses ssg.yaml.open_and_expand(), through expand_yaml(), to handle Jinja2
+        control structures that would otherwise break standard YAML parsing.
 
         Args:
             rule_path: Path to rule.yml
@@ -141,8 +143,7 @@ class RuleDiscovery:
         else:
             substitutions = dict(GENERIC_SUBSTITUTIONS)
         try:
-            ssg_yaml = get_ssg_modules().yaml
-            return ssg_yaml.open_and_expand(str(rule_path), substitutions)  # type: ignore[no-any-return]
+            return expand_yaml(get_ssg_modules().yaml, rule_path, substitutions)  # type: ignore[no-any-return]
         except Exception as e:
             expansion_error = e
 
@@ -169,7 +170,7 @@ class RuleDiscovery:
 
         for attempt in attempts():
             try:
-                data = get_ssg_modules().yaml.open_and_expand(str(rule_path), attempt)
+                data = expand_yaml(get_ssg_modules().yaml, rule_path, attempt)
             except Exception:
                 continue
             logger.debug(f"Expanded {rule_path} with product {attempt.get('product')!r}")

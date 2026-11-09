@@ -34,9 +34,9 @@ The system SHALL define a `RuleProductAvailability` Pydantic model with fields: 
 - **THEN** all fields are populated according to their types and defaults
 
 ### Requirement: Profile scanning with reverse index cache
-The system SHALL build a reverse index `{rule_id → [(product, profile_id)]}` on first call and share it between `RuleDiscovery` instances for the same content repository, because each MCP tool call creates a new instance. The system SHALL rebuild the index when a file it was built from is added, removed, or modified: a profile, a control file, a `rule.yml` under a rule directory that a `product.yml` names, a `product.yml`, or a `.yml` file in `product_properties`.
+The system SHALL build a reverse index `{rule_id → [(product, profile_id)]}` on first call and share it between `RuleDiscovery` instances for the same content repository, because each MCP tool call creates a new instance. The system SHALL rebuild the index when a file it was built from is added, removed, or modified: a profile, a control file, a `rule.yml` under a rule directory that a `product.yml` names, a `product.yml`, a `.yml` file in `product_properties`, or a Jinja2 macro file in `shared/macros`. The index SHALL be the only discovery result kept between tool calls.
 
-The system SHALL compare each file's modification time, status change time and size individually, not only the newest time. It SHALL list the rule directories again on each check, down to each rule directory, so a rule added or removed at any depth is noticed without relying on directory timestamps. When a `product.yml` changes, the rebuilt index SHALL watch the rule directories the changed file names.
+The system SHALL compare each file's modification time, status change time and size individually, not only the newest time. A file changed in the last five seconds SHALL also be compared by a hash of its contents, in that check and every later one, and every file SHALL be hashed where the status change time is a creation time, as on Windows. It SHALL list the rule directories again on each check, down to each rule directory, so a rule added or removed at any depth is noticed without relying on directory timestamps. When a `product.yml` changes, the rebuilt index SHALL watch the rule directories the changed file names.
 
 #### Scenario: Cache reuse
 - **WHEN** `get_rule_product_availability` is called twice, from the same or different `RuleDiscovery` instances
@@ -66,6 +66,13 @@ The system SHALL compare each file's modification time, status change time and s
 - **WHEN** a `product.yml` changes its `benchmark_root` or adds `additional_content_directories`
 - **THEN** the next call rebuilds the reverse index, and later changes under the new directories are noticed
 
+#### Scenario: Rewrite within one clock tick
+- **WHEN** a watched file is rewritten with the same size and its modification time, status change time and size all stay the same
+- **THEN** its hash makes the next call rebuild the reverse index
+
+#### Scenario: Macro change
+- **WHEN** a file in `shared/macros` changes between two calls
+- **THEN** the second call rebuilds the reverse index
 ### Requirement: Product filter in rule search
 When `search_rules` is called with a `product`, a rule SHALL match the product filter when any profile of that product selects it, as resolved by the reverse index, or when it has identifiers for that product.
 

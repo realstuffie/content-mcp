@@ -15,8 +15,7 @@ from typing import Any
 
 import yaml
 
-from content_agent.core.discovery.content_state import ContentState, take_content_state
-from content_agent.core.discovery.rule_paths import configured_rule_roots, rule_files
+from content_agent.core.discovery.rule_paths import rule_files
 from content_agent.core.integration import get_content_repository
 from content_agent.models import TemplateParameter, TemplateSchema, TemplateSummary
 
@@ -65,10 +64,6 @@ class _TemplateUse:
     rule_id: str
     variables: dict[str, Any]
     had_jinja: bool
-
-
-# Template uses per content repository, with the state of the rule files they were read from
-_usage_cache: dict[Path, tuple[ContentState, dict[str, list[_TemplateUse]]]] = {}
 
 
 def _clean_text(lines: list[str]) -> str:
@@ -194,21 +189,7 @@ def _read_template_use(rule_file: Path) -> tuple[str, _TemplateUse] | None:
 
 
 def template_uses(repo_path: Path) -> dict[str, list[_TemplateUse]]:
-    """Map each template to the rules that use it, cached until a rule or product file changes."""
-    cached = _usage_cache.get(repo_path)
-    if cached and cached[0].is_current():
-        return cached[1]
-
-    # Taken before reading, so a rule that changes meanwhile is read again next time.
-    # product.yml files name the rule directories.
-    try:
-        state: ContentState | None = take_content_state(
-            repo_path, ("products/*/product.yml",), configured_rule_roots(repo_path)
-        )
-    except OSError as e:
-        logger.debug(f"Could not record the rule files for template uses: {e}")
-        state = None
-
+    """Map each template to the rules that use it, reading the rule files on each call."""
     uses: dict[str, list[_TemplateUse]] = {}
     for rule_file in rule_files(repo_path):
         found = _read_template_use(rule_file)
@@ -216,10 +197,6 @@ def template_uses(repo_path: Path) -> dict[str, list[_TemplateUse]]:
             uses.setdefault(found[0], []).append(found[1])
     for template_uses_list in uses.values():
         template_uses_list.sort(key=lambda use: use.rule_id)
-    if state is None:
-        _usage_cache.pop(repo_path, None)
-    else:
-        _usage_cache[repo_path] = (state, uses)
     return uses
 
 

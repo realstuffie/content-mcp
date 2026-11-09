@@ -4,6 +4,7 @@ import os
 import time
 from pathlib import Path
 
+from content_agent.core.discovery import content_state
 from content_agent.core.discovery.content_state import take_content_state
 from content_agent.core.discovery.rule_paths import configured_rule_roots
 
@@ -170,3 +171,68 @@ def test_added_content_directory_refreshes_the_watched_rules(tmp_path):
     assert repo / "extra_rules" in refreshed.rule_roots
     extra_rule.write_text("title: A changed rule\n")
     assert not refreshed.is_current()
+
+
+def _freeze_stat(monkeypatch, stats: dict[str, tuple[int, int, int]]) -> None:
+    """Report fixed (mtime, ctime, size) for some files, as one clock tick would."""
+    real_file_entry = content_state.file_entry
+
+    def file_entry(path):
+        entry = real_file_entry(path)
+        if str(path) in stats:
+            mtime, ctime, size = stats[str(path)]
+            return entry._replace(mtime_ns=mtime, ctime_ns=ctime, size=size)
+        return entry
+
+    monkeypatch.setattr(content_state, "file_entry", file_entry)
+
+
+def test_recent_files_are_hashed_and_old_ones_are_not(tmp_path, monkeypatch):
+    repo = _repo(tmp_path)
+    rule_yml = repo / "linux_os" / "guide" / "group_a" / "rule_one" / "rule.yml"
+    product_yml = repo / "products" / "rhel9" / "product.yml"
+    _freeze_stat(monkeypatch, {str(product_yml): (100 * SECONDS, 100 * SECONDS, 10)})
+
+    entries = {entry.path: entry for entry in _state(repo).entries}
+
+    assert entries[str(rule_yml)].digest
+    assert not entries[str(product_yml)].digest
+
+
+def test_same_tick_rewrite_with_the_same_size(tmp_path, monkeypatch):
+    # mtime, ctime and size all stay the same, as when a rewrite falls in the
+    # same clock tick as the last check
+    repo = _repo(tmp_path)
+    rule_yml = repo / "linux_os" / "guide" / "group_a" / "rule_one" / "rule.yml"
+    now = time.time_ns()
+    _freeze_stat(monkeypatch, {str(rule_yml): (now, now, 14)})
+    state = _state(repo)
+
+    rule_yml.write_text("title: B rule\n")
+
+    assert not state.is_current()
+
+
+def test_hashed_files_stay_hashed_once_they_are_old(tmp_path, monkeypatch):
+    repo = _repo(tmp_path)
+    rule_yml = repo / "linux_os" / "guide" / "group_a" / "rule_one" / "rule.yml"
+    now = time.time_ns()
+    _freeze_stat(monkeypatch, {str(rule_yml): (now, now, 14)})
+    state = _state(repo)
+
+    # Later checks no longer count the file as recent, but still compare its hash
+    monkeypatch.setattr(content_state, "RECENT_NS", 0)
+    assert state.is_current()
+    rule_yml.write_text("title: B rule\n")
+    assert not state.is_current()
+
+
+def test_every_file_is_hashed_without_a_change_time(tmp_path, monkeypatch):
+    repo = _repo(tmp_path)
+    product_yml = repo / "products" / "rhel9" / "product.yml"
+    _freeze_stat(monkeypatch, {str(product_yml): (100 * SECONDS, 100 * SECONDS, 10)})
+    monkeypatch.setattr(content_state, "CTIME_IS_CHANGE_TIME", False)
+
+    entries = {entry.path: entry for entry in _state(repo).entries}
+
+    assert entries[str(product_yml)].digest

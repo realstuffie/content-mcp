@@ -284,10 +284,9 @@ Discovery classes instantiate and return appropriate model objects:
 ## Performance Considerations
 
 ### Caching
-- Rule index cached after first build
-- Product list cached
-- Template list cached
-- Cache invalidation on repository update
+- The profile-to-rule index is shared between tool calls, because building it takes
+  about 15 seconds. It is rebuilt when any file it was built from changes.
+- Everything else reads the content files on each call.
 
 ### Lazy Loading
 - SSG modules loaded only when needed

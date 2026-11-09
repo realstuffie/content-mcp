@@ -42,16 +42,9 @@ def _write_yaml(path: Path, data: dict) -> None:
         yaml.dump(data, f)
 
 
-def _mock_product_discovery(known_products: list[str]):
-    from content_agent.models.common import DiscoveryResult
-
-    mock_cls = MagicMock()
-    mock_instance = MagicMock()
-    mock_instance.list_products.return_value = DiscoveryResult(
-        items=[MagicMock(product_id=pid) for pid in known_products]
-    )
-    mock_cls.return_value = mock_instance
-    return mock_cls
+def _mock_product_ids(known_products: list[str]):
+    """Stand in for product_ids(), which lists the products directory."""
+    return MagicMock(return_value=sorted(known_products))
 
 
 def _discovery_for(tmp_path: Path, mock_get_repo: MagicMock):
@@ -92,8 +85,8 @@ class TestNestedDiscovery:
     @patch("content_agent.core.discovery.controls.get_content_repository")
     def test_stats_count_nested_requirements(self, mock_get_repo, tmp_path):
         with patch(
-            "content_agent.core.discovery.products.ProductDiscovery",
-            _mock_product_discovery([]),
+            "content_agent.core.discovery.controls.product_ids",
+            _mock_product_ids([]),
         ):
             stats = _discovery_for(tmp_path, mock_get_repo).get_control_stats("nested")
 
@@ -105,8 +98,8 @@ class TestNestedDiscovery:
     @patch("content_agent.core.discovery.controls.get_content_repository")
     def test_rule_index_includes_nested_rules(self, mock_get_repo, tmp_path):
         with patch(
-            "content_agent.core.discovery.products.ProductDiscovery",
-            _mock_product_discovery([]),
+            "content_agent.core.discovery.controls.product_ids",
+            _mock_product_ids([]),
         ):
             index = _discovery_for(tmp_path, mock_get_repo).get_control_rule_index(
                 control_ids=["nested"]
@@ -118,8 +111,8 @@ class TestNestedDiscovery:
     @patch("content_agent.core.discovery.controls.get_content_repository")
     def test_search_finds_nested_requirement(self, mock_get_repo, tmp_path):
         with patch(
-            "content_agent.core.discovery.products.ProductDiscovery",
-            _mock_product_discovery([]),
+            "content_agent.core.discovery.controls.product_ids",
+            _mock_product_ids([]),
         ):
             results = _discovery_for(tmp_path, mock_get_repo).search_controls(
                 "grandchild", control_id="nested"
@@ -130,8 +123,8 @@ class TestNestedDiscovery:
     @patch("content_agent.core.discovery.controls.get_content_repository")
     def test_file_path_found_for_nested_requirement(self, mock_get_repo, tmp_path):
         with patch(
-            "content_agent.core.discovery.products.ProductDiscovery",
-            _mock_product_discovery([]),
+            "content_agent.core.discovery.controls.product_ids",
+            _mock_product_ids([]),
         ):
             result = _discovery_for(tmp_path, mock_get_repo).get_requirement_file_path(
                 "nested", "1.1.1"

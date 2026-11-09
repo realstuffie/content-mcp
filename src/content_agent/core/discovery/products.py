@@ -1,6 +1,5 @@
 """Product discovery implementation."""
 
-import copy
 import logging
 import re
 from pathlib import Path
@@ -29,6 +28,18 @@ def product_name_and_version(product_id: str) -> tuple[str, str | None]:
     return match.group(1), match.group(2)
 
 
+def product_ids(repo_path: Path) -> list[str]:
+    """Return the IDs of the products directories that have a product.yml.
+
+    This only lists directories, so it is fast enough to call for every
+    product check. list_products() also reads each product.yml.
+    """
+    products_dir = repo_path / "products"
+    if not products_dir.is_dir():
+        return []
+    return sorted(p.name for p in products_dir.iterdir() if (p / "product.yml").is_file())
+
+
 def _first_cpe(data: dict) -> str | None:
     """Return the name of the first CPE in a product.yml `cpes` list."""
     for entry in data.get("cpes") or []:
@@ -37,20 +48,6 @@ def _first_cpe(data: dict) -> str | None:
                 if isinstance(cpe, dict) and cpe.get("name"):
                     return str(cpe["name"])
     return None
-
-
-# Product lists per products directory, with the signature of its product.yml files
-_product_list_cache: dict[Path, tuple[tuple[tuple[str, int], ...], DiscoveryResult]] = {}
-
-
-def _product_files_signature(products_dir: Path) -> tuple[tuple[str, int], ...]:
-    """Name and modification time of every product.yml, to tell when the list changes."""
-    return tuple(
-        sorted(
-            (path.parent.name, path.stat().st_mtime_ns)
-            for path in products_dir.glob("*/product.yml")
-        )
-    )
 
 
 class ProductDiscovery:
@@ -76,13 +73,6 @@ class ProductDiscovery:
             logger.error(f"Products directory not found: {products_dir}")
             return result
 
-        # Every control tool that takes a product lists products to check it, so
-        # reuse the list until a product.yml is added, removed or changed
-        signature = _product_files_signature(products_dir)
-        cached = _product_list_cache.get(products_dir)
-        if cached is not None and cached[0] == signature:
-            return copy.deepcopy(cached[1])
-
         for product_dir in products_dir.iterdir():
             if not product_dir.is_dir():
                 continue
@@ -101,7 +91,6 @@ class ProductDiscovery:
 
         result.items.sort(key=lambda p: p.product_id)
         logger.info(f"Found {len(result.items)} products")
-        _product_list_cache[products_dir] = (signature, copy.deepcopy(result))
         return result
 
     def get_product_details(self, product_id: str) -> ProductDetails | None:

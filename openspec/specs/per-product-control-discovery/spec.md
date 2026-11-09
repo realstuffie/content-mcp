@@ -4,10 +4,10 @@
 
 The `ControlDiscovery` class SHALL scan both the global `controls/` directory and product-specific `products/<product>/controls/` directories when listing or resolving control files. An internal `_get_controls_dirs(product: str | None)` method SHALL return an ordered list of directories:
 1. `<repo>/controls/` (always included first)
-2. If `product` is specified: validate the product exists via `ProductDiscovery`, then append `<repo>/products/<product>/controls/` (if it exists)
-3. If `product` is `None`: enumerate all known products via `ProductDiscovery` and append existing `<repo>/products/<product>/controls/` directories (sorted alphabetically)
+2. If `product` is specified: validate that the product exists, then append `<repo>/products/<product>/controls/` (if it exists)
+3. If `product` is `None`: enumerate all known products and append existing `<repo>/products/<product>/controls/` directories (sorted alphabetically)
 
-When `product` is specified but not recognized by `ProductDiscovery`, the method SHALL raise a `ValueError` with a descriptive message.
+A known product SHALL be a directory under `<repo>/products/` that has a `product.yml`. The check SHALL list directories without reading each `product.yml`, and SHALL read the directories on every call. When `product` is specified but not known, the method SHALL raise a `ValueError` with a descriptive message.
 
 #### Scenario: Product specified with product controls directory
 

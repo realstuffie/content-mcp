@@ -14,17 +14,9 @@ def _write_yaml(path: Path, data: dict) -> None:
         yaml.dump(data, f)
 
 
-def _mock_product_discovery(known_products: list[str]):
-    """Create a mock ProductDiscovery that returns given product IDs."""
-    from content_agent.models.common import DiscoveryResult
-
-    mock_cls = MagicMock()
-    mock_instance = MagicMock()
-    mock_instance.list_products.return_value = DiscoveryResult(
-        items=[MagicMock(product_id=pid) for pid in known_products]
-    )
-    mock_cls.return_value = mock_instance
-    return mock_cls
+def _mock_product_ids(known_products: list[str]):
+    """Stand in for product_ids(), which lists the products directory."""
+    return MagicMock(return_value=sorted(known_products))
 
 
 class TestRequirementFilePathModel:
@@ -80,8 +72,8 @@ class TestGetRequirementFilePath:
         from content_agent.core.discovery.controls import ControlDiscovery
 
         with patch(
-            "content_agent.core.discovery.products.ProductDiscovery",
-            _mock_product_discovery([]),
+            "content_agent.core.discovery.controls.product_ids",
+            _mock_product_ids([]),
         ):
             discovery = ControlDiscovery()
             result = discovery.get_requirement_file_path("anssi", "R1")
@@ -116,8 +108,8 @@ class TestGetRequirementFilePath:
         from content_agent.core.discovery.controls import ControlDiscovery
 
         with patch(
-            "content_agent.core.discovery.products.ProductDiscovery",
-            _mock_product_discovery([]),
+            "content_agent.core.discovery.controls.product_ids",
+            _mock_product_ids([]),
         ):
             discovery = ControlDiscovery()
             result = discovery.get_requirement_file_path("srg_gpos", "SRG-OS-000001")
@@ -146,8 +138,8 @@ class TestGetRequirementFilePath:
         from content_agent.core.discovery.controls import ControlDiscovery
 
         with patch(
-            "content_agent.core.discovery.products.ProductDiscovery",
-            _mock_product_discovery([]),
+            "content_agent.core.discovery.controls.product_ids",
+            _mock_product_ids([]),
         ):
             discovery = ControlDiscovery()
             result = discovery.get_requirement_file_path("srg_gpos", "SRG-OS-999999")
@@ -167,8 +159,8 @@ class TestGetRequirementFilePath:
         from content_agent.core.discovery.controls import ControlDiscovery
 
         with patch(
-            "content_agent.core.discovery.products.ProductDiscovery",
-            _mock_product_discovery([]),
+            "content_agent.core.discovery.controls.product_ids",
+            _mock_product_ids([]),
         ):
             discovery = ControlDiscovery()
             result = discovery.get_requirement_file_path("nonexistent", "R1")
@@ -196,8 +188,8 @@ class TestGetRequirementFilePath:
         from content_agent.core.discovery.controls import ControlDiscovery
 
         with patch(
-            "content_agent.core.discovery.products.ProductDiscovery",
-            _mock_product_discovery([]),
+            "content_agent.core.discovery.controls.product_ids",
+            _mock_product_ids([]),
         ):
             discovery = ControlDiscovery()
             result = discovery.get_requirement_file_path("anssi", "NONEXISTENT")
@@ -225,8 +217,8 @@ class TestGetRequirementFilePath:
         from content_agent.core.discovery.controls import ControlDiscovery
 
         with patch(
-            "content_agent.core.discovery.products.ProductDiscovery",
-            _mock_product_discovery([]),
+            "content_agent.core.discovery.controls.product_ids",
+            _mock_product_ids([]),
         ):
             discovery = ControlDiscovery()
             result = discovery.get_requirement_file_path("test", "R1")
@@ -248,8 +240,8 @@ class TestRequirementsInSharedFiles:
                 side_effect=RuntimeError("SSG modules not initialized"),
             ),
             patch(
-                "content_agent.core.discovery.products.ProductDiscovery",
-                _mock_product_discovery([]),
+                "content_agent.core.discovery.controls.product_ids",
+                _mock_product_ids([]),
             ),
         ):
             get_repo.return_value.path = tmp_path

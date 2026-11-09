@@ -7,6 +7,8 @@ from typing import Any, Literal
 
 import yaml
 
+from content_agent.core.discovery.jinja_expansion import expand_yaml
+from content_agent.core.discovery.products import product_ids
 from content_agent.core.integration import get_content_repository
 from content_agent.core.integration.product_variables import load_product_variables
 from content_agent.core.integration.ssg_modules import get_ssg_modules
@@ -133,8 +135,7 @@ def load_control_yaml(file_path: Path, substitutions: dict[str, Any]) -> Any:
     which raises ``yaml.YAMLError`` when it does not parse.
     """
     try:
-        ssg_yaml = get_ssg_modules().yaml
-        data = ssg_yaml.open_and_expand(str(file_path), substitutions)
+        data = expand_yaml(get_ssg_modules().yaml, file_path, substitutions)
         if isinstance(data, dict):
             return data
         logger.debug(f"Jinja2 expansion of {file_path} returned no mapping")
@@ -175,11 +176,7 @@ class ControlDiscovery:
             dirs.append(global_dir)
 
         if product is not None:
-            # Validate product exists via ProductDiscovery
-            from content_agent.core.discovery.products import ProductDiscovery
-
-            product_discovery = ProductDiscovery()
-            known_products = [p.product_id for p in product_discovery.list_products().items]
+            known_products = product_ids(self.content_repo.path)
             if product not in known_products:
                 raise ValueError(
                     f"Unknown product '{product}'. "
@@ -190,11 +187,7 @@ class ControlDiscovery:
                 dirs.append(product_controls)
         else:
             # Discover all product control directories
-            from content_agent.core.discovery.products import ProductDiscovery
-
-            product_discovery = ProductDiscovery()
-            known_products = [p.product_id for p in product_discovery.list_products().items]
-            for pid in sorted(known_products):
+            for pid in product_ids(self.content_repo.path):
                 product_controls = self.content_repo.path / "products" / pid / "controls"
                 if product_controls.exists():
                     dirs.append(product_controls)

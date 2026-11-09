@@ -137,3 +137,22 @@ def test_profile_index_is_rebuilt_when_product_files_change(tmp_path):
         assert len(builds) == 3
 
     rules_module._shared_profile_indexes.clear()
+
+
+def test_profile_index_is_rebuilt_when_a_macro_changes(tmp_path):
+    repo = _repo(tmp_path)
+    macros = repo / "shared" / "macros"
+    macros.mkdir(parents=True)
+    (macros / "10-general.jinja").write_text("{{% macro a() %}}a{{% endmacro %}}\n")
+    rules_module._shared_profile_indexes.clear()
+    builds: list[int] = []
+
+    with patch.object(
+        rules_module.RuleDiscovery, "_build_profile_rule_index", _platform_index(builds)
+    ):
+        _discovery(repo)._ensure_profile_rule_index()
+        (macros / "10-general.jinja").write_text("{{% macro a() %}}changed{{% endmacro %}}\n")
+        _discovery(repo)._ensure_profile_rule_index()
+
+    rules_module._shared_profile_indexes.clear()
+    assert len(builds) == 2
