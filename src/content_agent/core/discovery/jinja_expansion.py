@@ -1,22 +1,35 @@
-"""Expand content files with ComplianceAsCode's Jinja2, always from the current files.
+"""Expand content files with ComplianceAsCode's Jinja2, from current files and per product.
 
 ssg.jinja makes one Jinja2 environment the first time a file is expanded and
 keeps it for the life of the process. That suits the build, which reads each
-file once. The server keeps running while files change, and the environment
-holds on to:
+file once for one product. The server keeps running while files change, and
+expands files for many products. The environment holds on to:
 
 - Compiled templates. Its loader treats one as current while the file's mtime is
   unchanged, so a file rewritten with its old mtime kept its old contents.
 - The macros in shared/macros, compiled once when the environment is made.
-- The variables of the expansion that made it, as globals.
+- The variables of the expansion that made it, as globals. Macros read their
+  variables from there, so after a rhel9 expansion, an ubuntu2204 rule's
+  describe_package_install() still said `dnf install`.
 
-expand_yaml() turns the template cache off, so every expansion reads its file.
-It also drops the environment when a macro file, a product.yml or a
-product_properties file changes, so ssg.jinja makes a new one.
+expand_yaml() keeps one environment for each set of variables and puts it in
+ssg.jinja before expanding. It turns each environment's template cache off, so
+every expansion reads its file. When a macro file, a product.yml or a
+product_properties file changes, it drops all of them.
+
+Making an environment compiles the macros, about 0.5 s. A bytecode cache in a
+temporary directory, which ssg.jinja supports, cuts that to about 13 ms for
+every environment after the first. The bytecode cache checks a hash of each
+template's source, so it never serves old contents.
 """
 
+import atexit
 import importlib
 import logging
+import shutil
+import tempfile
+from collections import OrderedDict
+from types import ModuleType
 from typing import Any
 
 from content_agent.core.discovery.content_state import ContentState, take_content_state
@@ -31,32 +44,50 @@ ENVIRONMENT_INPUTS = (
     "product_properties/*.yml",
 )
 
-# ssg.jinja's current environment, and the state of its inputs when it was made
-_environment_made_from: tuple[Any, ContentState] | None = None
+# Environments kept at once, about 2 MB each. One is made again in about 13 ms.
+MAX_ENVIRONMENTS = 16
+
+# Environments by their variables, least recently used first
+_environments: "OrderedDict[str, Any]" = OrderedDict()
+# The state of ENVIRONMENT_INPUTS when the kept environments were made
+_inputs: ContentState | None = None
+_bytecode_dir: str | None = None
 
 
 def expand_yaml(ssg_yaml: Any, path: Any, substitutions: dict[str, Any]) -> Any:
     """Expand a YAML file with ssg_yaml.open_and_expand(), from current files.
 
-    Callers pass the ssg.yaml module they got from get_ssg_modules().
+    Callers pass the ssg.yaml module they got from get_ssg_modules(). The
+    caller's `substitutions` dict is left unchanged.
     """
-    jinja = _ssg_jinja()
+    jinja = _ssg_jinja(ssg_yaml)
     if jinja is None:
         return ssg_yaml.open_and_expand(str(path), substitutions)
 
-    inputs = _drop_stale_environment(jinja)
+    _drop_stale_environments()
+    key = _variables_key(substitutions)
+    environment = _environments.get(key)
+    if environment is not None:
+        _environments.move_to_end(key)
+    _set_environment(jinja, environment)
+    variables = dict(substitutions)
+    variables.update(jinja2_cache_enabled="true", jinja2_cache_dir=_bytecode_cache_dir())
     try:
-        return ssg_yaml.open_and_expand(str(path), substitutions)
+        return ssg_yaml.open_and_expand(str(path), variables)
     finally:
-        _record_new_environment(jinja, inputs)
-        environment = _environment(jinja)
-        if environment is not None:
-            environment.cache = None
+        made = _environment(jinja)
+        if made is not None:
+            made.cache = None
+            _keep(key, made)
 
 
-def _ssg_jinja() -> Any:
+def _ssg_jinja(ssg_yaml: Any) -> Any:
+    """Return the ssg.jinja module next to `ssg_yaml`, or None for a stand-in."""
+    if not isinstance(ssg_yaml, ModuleType):
+        return None
+    package = ssg_yaml.__name__.rpartition(".")[0]
     try:
-        return importlib.import_module("ssg.jinja")
+        return importlib.import_module(f"{package}.jinja")
     except ImportError:
         return None
 
@@ -75,31 +106,37 @@ def _set_environment(jinja: Any, environment: Any) -> None:
         jinja._get_jinja_environment.env = environment
 
 
-def _drop_stale_environment(jinja: Any) -> ContentState | None:
-    """Drop the environment if its inputs changed or it wasn't made here.
+def _variables_key(substitutions: dict[str, Any]) -> str:
+    """Return a key that is equal for equal variables."""
+    return repr(sorted(substitutions.items(), key=lambda item: str(item[0])))
 
-    Returns the inputs' state when the next expansion will make a new
-    environment, taken before it reads them.
-    """
-    global _environment_made_from
-    environment = _environment(jinja)
-    if environment is not None and _environment_made_from is not None:
-        made, inputs = _environment_made_from
-        if made is environment and inputs.is_current():
-            return None
-    if environment is not None:
-        logger.debug("Dropping the Jinja2 environment, its inputs changed")
-        _set_environment(jinja, None)
-    _environment_made_from = None
+
+def _keep(key: str, environment: Any) -> None:
+    _environments[key] = environment
+    _environments.move_to_end(key)
+    while len(_environments) > MAX_ENVIRONMENTS:
+        _environments.popitem(last=False)
+
+
+def _drop_stale_environments() -> None:
+    """Drop every kept environment if a macro or product file changed."""
+    global _inputs
+    if _inputs is not None and _inputs.is_current():
+        return
+    if _environments:
+        logger.debug("Dropping the Jinja2 environments, their inputs changed")
+    _environments.clear()
+    # Taken before the next environment reads the files
     try:
-        return take_content_state(get_content_repository().path, ENVIRONMENT_INPUTS)
+        _inputs = take_content_state(get_content_repository().path, ENVIRONMENT_INPUTS)
     except Exception as e:
         logger.debug(f"Could not record the Jinja2 environment inputs: {e}")
-        return None
+        _inputs = None
 
 
-def _record_new_environment(jinja: Any, inputs: ContentState | None) -> None:
-    global _environment_made_from
-    environment = _environment(jinja)
-    if inputs is not None and environment is not None and _environment_made_from is None:
-        _environment_made_from = (environment, inputs)
+def _bytecode_cache_dir() -> str:
+    global _bytecode_dir
+    if _bytecode_dir is None:
+        _bytecode_dir = tempfile.mkdtemp(prefix="content-mcp-jinja-")
+        atexit.register(shutil.rmtree, _bytecode_dir, ignore_errors=True)
+    return _bytecode_dir

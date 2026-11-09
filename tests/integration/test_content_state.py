@@ -106,3 +106,21 @@ class TestContentStateWithRealContent:
         rules_module._shared_profile_indexes.clear()
 
         assert platforms == ["ocp4-host", "ocp4-node"]
+
+    def test_macros_use_the_expanded_product(self, real_content_repo, tmp_path):
+        from content_agent.core.discovery.rules import RuleDiscovery
+
+        rule_yml = tmp_path / "package_aide_installed" / "rule.yml"
+        rule_yml.parent.mkdir()
+        rule_yml.write_text(
+            "title: Install AIDE\n"
+            "description: |-\n    {{{ describe_package_install(package='aide') }}}\n"
+        )
+
+        def install_command(product):
+            return RuleDiscovery()._load_rule_yaml(rule_yml, product)["description"]
+
+        # Before, every product used the variables of the first one expanded
+        assert "dnf install aide" in install_command("rhel9")
+        assert "apt-get install aide" in install_command("ubuntu2204")
+        assert "dnf install aide" in install_command("rhel9")
