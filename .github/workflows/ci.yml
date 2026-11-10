@@ -10,7 +10,7 @@ on:
 env:
   # ComplianceAsCode/content commit the integration tests run against. Bump it
   # when the "Content drift" workflow passes against content master.
-  CONTENT_REF: f09d24369249b7eae7e241bf82541bdf718e7661
+  CONTENT_REF: aa9bac97e93f50c2db47106d3d63ed11ca4cd92e
 
 jobs:
   test:
